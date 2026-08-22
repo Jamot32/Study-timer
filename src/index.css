@@ -1,0 +1,50 @@
+:root {
+  --text: #1f2430;
+  --text-muted: #6b7280;
+  --bg: #f8fafc;
+  --accent: #4f46e5;
+
+  color-scheme: light dark;
+  font-family: system-ui, 'Segoe UI', Roboto, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --text: #e5e7eb;
+    --text-muted: #9ca3af;
+    --bg: #111318;
+    --accent: #a5b4fc;
+  }
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  color: var(--text);
+  background: var(--bg);
+}
+
+.app {
+  min-height: 100svh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 24px;
+  text-align: center;
+}
+
+.app h1 {
+  margin: 0;
+  font-size: 2.5rem;
+}
+
+.app p {
+  margin: 0;
+  color: var(--text-muted);
+}
