@@ -1,18 +1,17 @@
 # Study Timer
 
-A focused study timer app.
+A focused study timer app, built with React Native and Expo (iOS + Android).
 
 ## Stack
 
-- React 19 + TypeScript
-- Vite
-- Oxlint
+- Expo SDK 57 (React Native 0.86, React 19)
+- TypeScript
 
 ## Getting started
 
 ```sh
 npm install
-npm run dev      # start dev server
-npm run build    # type-check and build for production
-npm run lint     # lint with oxlint
+npm run ios       # start on iOS simulator
+npm run android   # start on Android emulator
+npm start         # start dev server (Expo Go / device)
 ```
