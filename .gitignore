@@ -39,3 +39,9 @@ yarn-error.*
 # generated native folders
 /ios
 /android
+
+# local agent & MCP configuration
+.mcp.json
+.agents/
+.cursor/
+.vscode/
