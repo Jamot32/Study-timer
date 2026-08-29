@@ -1,14 +1,17 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { saveSession, StudySession } from './sessions';
+import { loadSettings } from './settings';
 
 export type TimerState = 'ready' | 'running' | 'paused';
 
 const TICK_MS = 100;
 
-interface UseStudyTimerResult {
+export interface UseStudyTimerResult {
   state: TimerState;
   elapsedMs: number;
   toggle: () => void;
   reset: () => void;
+  finish: (subject?: string | null) => Promise<StudySession | null>;
 }
 
 export function formatElapsed(ms: number): string {
@@ -17,7 +20,8 @@ export function formatElapsed(ms: number): string {
   const m = Math.floor((totalSec % 3600) / 60);
   const s = totalSec % 60;
   const pad = (n: number) => String(n).padStart(2, '0');
-  return h > 0 ? `${pad(h)}:${pad(m)}:${pad(s)}` : `${pad(m)}:${pad(s)}`;
+  // Always HH:MM:SS so the clock never changes width mid-session.
+  return `${pad(h)}:${pad(m)}:${pad(s)}`;
 }
 
 export function useStudyTimer(): UseStudyTimerResult {
@@ -26,6 +30,7 @@ export function useStudyTimer(): UseStudyTimerResult {
 
   const accumulatedMs = useRef(0);
   const startedAt = useRef<number | null>(null);
+  const sessionStartedAt = useRef<string | null>(null);
 
   useEffect(() => {
     if (state !== 'running') return;
@@ -44,6 +49,9 @@ export function useStudyTimer(): UseStudyTimerResult {
       setElapsedMs(accumulatedMs.current);
       setState('paused');
     } else {
+      if (sessionStartedAt.current === null) {
+        sessionStartedAt.current = new Date().toISOString();
+      }
       startedAt.current = Date.now();
       setState('running');
     }
@@ -52,9 +60,48 @@ export function useStudyTimer(): UseStudyTimerResult {
   const reset = useCallback(() => {
     accumulatedMs.current = 0;
     startedAt.current = null;
+    sessionStartedAt.current = null;
     setElapsedMs(0);
     setState('ready');
   }, []);
 
-  return { state, elapsedMs, toggle, reset };
+  const finish = useCallback(
+    async (subject?: string | null): Promise<StudySession | null> => {
+      const now = Date.now();
+      let totalMs = accumulatedMs.current;
+      if (startedAt.current !== null) {
+        totalMs += now - startedAt.current;
+      }
+
+      if (totalMs === 0) {
+        return null;
+      }
+
+      const startedIso =
+        sessionStartedAt.current ?? new Date(now - totalMs).toISOString();
+      const endedIso = new Date(now).toISOString();
+
+      const { minSessionMs } = await loadSettings();
+      const session = await saveSession(
+        {
+          startedAt: startedIso,
+          endedAt: endedIso,
+          durationMs: totalMs,
+          subject,
+        },
+        minSessionMs
+      );
+
+      accumulatedMs.current = 0;
+      startedAt.current = null;
+      sessionStartedAt.current = null;
+      setElapsedMs(0);
+      setState('ready');
+
+      return session;
+    },
+    []
+  );
+
+  return { state, elapsedMs, toggle, reset, finish };
 }

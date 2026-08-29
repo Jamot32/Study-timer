@@ -45,3 +45,5 @@ yarn-error.*
 .agents/
 .cursor/
 .vscode/
+.claude/
+.commandcode/
