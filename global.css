@@ -6,26 +6,53 @@
    Tweak the hex values here and every component follows. */
 @layer base {
   :root {
-    --background: 42 33% 94%;
-    --foreground: 24 28% 14%;
-    --card: 42 33% 94%;
-    --card-foreground: 24 28% 14%;
-    --primary: 12 76% 52%;
-    --primary-foreground: 42 33% 96%;
-    --secondary: 40 25% 86%;
-    --secondary-foreground: 24 28% 14%;
-    --muted: 40 25% 86%;
-    --muted-foreground: 25 12% 40%;
-    --accent: 197 52% 80%;
-    --accent-foreground: 24 28% 14%;
-    --ring: 12 76% 52%;
+    --background: 0 0% 3.5%;
+    --foreground: 0 0% 98%;
+    --card: 0 0% 7%;
+    --card-foreground: 0 0% 98%;
+    --popover: 0 0% 7%;
+    --popover-foreground: 0 0% 98%;
+    --primary: 0 0% 98%;
+    --primary-foreground: 0 0% 9%;
+    --secondary: 0 0% 12%;
+    --secondary-foreground: 0 0% 98%;
+    --muted: 0 0% 12%;
+    --muted-foreground: 0 0% 63.9%;
+    --accent: 0 0% 12%;
+    --accent-foreground: 0 0% 98%;
+    --destructive: 0 0% 20%;
+    --destructive-foreground: 0 0% 98%;
+    --border: 0 0% 15%;
+    --input: 0 0% 15%;
+    --ring: 0 0% 83.9%;
+    --radius: 0.5rem;
 
     /* Hard offset shadow used by every pixel component */
     --shadow: hsl(24 28% 14%);
   }
-
-  body {
-    @apply bg-background text-foreground;
+  .dark:root {
+    --background: 0 0% 3.5%;
+    --foreground: 0 0% 98%;
+    --card: 0 0% 7%;
+    --card-foreground: 0 0% 98%;
+    --popover: 0 0% 7%;
+    --popover-foreground: 0 0% 98%;
+    --primary: 0 0% 98%;
+    --primary-foreground: 0 0% 9%;
+    --secondary: 0 0% 12%;
+    --secondary-foreground: 0 0% 98%;
+    --muted: 0 0% 12%;
+    --muted-foreground: 0 0% 63.9%;
+    --accent: 0 0% 12%;
+    --accent-foreground: 0 0% 98%;
+    --destructive: 0 0% 20%;
+    --destructive-foreground: 0 0% 98%;
+    --border: 0 0% 15%;
+    --input: 0 0% 15%;
+    --ring: 0 0% 83.9%;
+    --radius: 0.5rem;
+    --shadow: hsl(24 28% 14%);
+  }
   }
 }
 
