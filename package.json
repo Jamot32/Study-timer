@@ -5,6 +5,7 @@
   "dependencies": {
     "@babel/core": "^7.29.0",
     "@expo/metro-runtime": "~57.0.14",
+    "@react-native-async-storage/async-storage": "2.2.0",
     "@rn-primitives/portal": "^1.5.3",
     "@rn-primitives/progress": "^1.5.2",
     "@rn-primitives/separator": "^1.5.2",
