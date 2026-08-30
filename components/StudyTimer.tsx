@@ -1,7 +1,10 @@
-import React, { useEffect, useMemo, useState } from 'react'
-import { Pressable, StyleSheet, Text, View, type StyleProp, type ViewStyle } from 'react-native'
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { Alert, Pressable, StyleSheet, Text, View, type StyleProp, type ViewStyle } from 'react-native'
 import { LinearGradient } from 'expo-linear-gradient'
-import { Moon, Pause, Play, RotateCcw, Settings2, Sun } from 'lucide-react-native'
+import { Check, Moon, Pause, Play, RotateCcw, Settings2, Sun } from 'lucide-react-native'
+import { confirmDestructive } from '../lib/confirm'
+import { loadSettings, minSessionLabel } from '../lib/settings'
+import { useStudyTimer } from '../lib/useStudyTimer'
 
 // ============================================================
 // PIXEL STUDY TIMER — React Native (Expo)
@@ -211,58 +214,124 @@ function PixelProgress({ value }: { value: number }) {
 }
 
 // ---------- 메인 컴포넌트 ----------
-export function StudyTimer() {
+export function StudyTimer({ onFinished }: { onFinished?: () => void }) {
   const [mode, setMode] = useState<'FOCUS' | 'SHORT BREAK'>('FOCUS')
-  const [elapsed, setElapsed] = useState(0)
   const [breakBank, setBreakBank] = useState(0)
-  const [isRunning, setIsRunning] = useState(false)
   const [streakBroken, setStreakBroken] = useState(false)
   const [weeklyMax, setWeeklyMax] = useState(0)
+  const [breakElapsed, setBreakElapsed] = useState(0)
+  const [isFinishing, setIsFinishing] = useState(false)
+
+  // FOCUS runs on the shared timer so finished sessions actually reach the
+  // dashboard; SHORT BREAK runs on its own counter so break time is never
+  // recorded as study time.
+  const { state, elapsedMs, toggle, reset: resetFocus, finish } = useStudyTimer()
+  const focusElapsed = Math.floor(elapsedMs / 1000)
+  const onBreak = mode === 'SHORT BREAK'
+  const elapsed = onBreak ? breakElapsed : focusElapsed
+  const isRunning = onBreak ? true : state === 'running'
 
   useEffect(() => {
-    if (!isRunning) return
-    const interval = setInterval(() => {
-      setElapsed((current) => {
-        const next = current + 1
-        if (mode === 'FOCUS') {
-          setWeeklyMax((maximum) => Math.max(maximum, next))
-          if (next % BREAK_EARN_SECONDS === 0) setBreakBank((value) => value + 5)
-        }
-        return next
-      })
-    }, 1000)
+    if (!onBreak) return
+    const interval = setInterval(() => setBreakElapsed((value) => value + 1), 1000)
     return () => clearInterval(interval)
-  }, [isRunning, mode])
+  }, [onBreak])
 
-  // 하늘/진행 바는 CYCLE_SECONDS 기준으로 돈다.
-  // 매초 elapsed가 바뀔 때마다 하늘 색이 키프레임 사이에서 보간된다.
+  useEffect(() => {
+    if (onBreak) return
+    setWeeklyMax((maximum) => Math.max(maximum, focusElapsed))
+  }, [focusElapsed, onBreak])
+
+  // one 5-minute credit per full hour of focus. Counting crossings rather than
+  // `elapsed % 3600 === 0` because the shared timer ticks every 100ms and can
+  // skip the exact second.
+  const earnedHours = useRef(0)
+  useEffect(() => {
+    if (onBreak) return
+    const hours = Math.floor(focusElapsed / BREAK_EARN_SECONDS)
+    if (hours > earnedHours.current) {
+      setBreakBank((value) => value + 5 * (hours - earnedHours.current))
+    }
+    earnedHours.current = hours
+  }, [focusElapsed, onBreak])
+
   const cycleProgress = (elapsed % CYCLE_SECONDS) / CYCLE_SECONDS
   const skyColors = useMemo(() => skyAt(cycleProgress + SKY_START), [cycleProgress])
   const isDay = !isSkyDark(skyColors[1])
   const skyText = isDay ? T.ink : '#e8ecf7'
   const breakLabel = breakBank > 0 ? `${breakBank} MIN BANKED` : 'NO BREAK BANKED'
 
+  const endBreak = useCallback(() => {
+    setMode('FOCUS')
+    setBreakElapsed(0)
+  }, [])
+
   const toggleTimer = () => {
-    if (isRunning) {
-      if (mode === 'FOCUS' && breakBank === 0) setStreakBroken(true)
-      setIsRunning(false)
+    if (onBreak) {
+      endBreak()
       return
     }
-    setIsRunning(true)
+    if (isRunning && breakBank === 0) setStreakBroken(true)
+    toggle()
   }
 
+  const handleFinish = useCallback(async () => {
+    if (onBreak) {
+      endBreak()
+      return
+    }
+    if (elapsedMs === 0 || isFinishing) return
+    setIsFinishing(true)
+    try {
+      const session = await finish()
+      earnedHours.current = 0
+      if (session === null) {
+        const { minSessionMs } = await loadSettings()
+        Alert.alert(
+          'Session Discarded',
+          `Sessions shorter than ${minSessionLabel(minSessionMs)} are not saved to history.`
+        )
+      } else {
+        onFinished?.()
+      }
+    } catch (error) {
+      console.error('Failed to finish session:', error)
+      Alert.alert('Error', 'Failed to save session.')
+    } finally {
+      setIsFinishing(false)
+    }
+  }, [elapsedMs, endBreak, finish, isFinishing, onBreak, onFinished])
+
   const reset = () => {
-    setElapsed(0)
-    setIsRunning(false)
-    setStreakBroken(false)
+    if (onBreak) {
+      endBreak()
+      return
+    }
+    const discard = () => {
+      resetFocus()
+      earnedHours.current = 0
+      setStreakBroken(false)
+    }
+    if (elapsedMs > 0) {
+      confirmDestructive(
+        'Discard Session?',
+        'This will reset the timer without saving your study time.',
+        'Discard',
+        discard
+      )
+    } else {
+      discard()
+    }
   }
 
   const useBreak = (minutes: number) => {
     if (breakBank < minutes) return
+    // pause rather than reset: the focus time accumulated so far must survive
+    // the break so it can still be finished and saved.
+    if (state === 'running') toggle()
     setBreakBank((value) => value - minutes)
+    setBreakElapsed(0)
     setMode('SHORT BREAK')
-    setElapsed(0)
-    setIsRunning(true)
   }
 
   const time = useMemo(() => formatTime(elapsed), [elapsed])
@@ -353,6 +422,15 @@ export function StudyTimer() {
               <Play size={20} color={T.primaryFg} fill={T.primaryFg} />
             )}
             <Text style={styles.mainButtonText}>{isRunning ? 'PAUSE' : 'START'}</Text>
+          </PixelButton>
+          <PixelButton
+            onPress={handleFinish}
+            disabled={!onBreak && (elapsedMs === 0 || isFinishing)}
+            color={T.secondary}
+            accessibilityLabel="Finish session and save it"
+            boxStyle={styles.iconButton}
+          >
+            <Check size={20} color={T.ink} />
           </PixelButton>
           <PixelButton
             onPress={reset}

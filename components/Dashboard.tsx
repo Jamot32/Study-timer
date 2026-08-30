@@ -98,27 +98,35 @@ export default function Dashboard({ isActive = true, refreshKey = 0 }: Dashboard
     return (
       <PixelBox shadow={3} style={styles.sessionGap} boxStyle={styles.sessionRow}>
         <View style={styles.sessionText}>
-          <Text style={styles.sessionSubject}>{subjectLabel.toUpperCase()}</Text>
+          <Text style={styles.sessionSubject} numberOfLines={1}>
+            {subjectLabel.toUpperCase()}
+          </Text>
           {startTimeLabel ? (
             <Text style={styles.sessionTime}>STARTED {startTimeLabel.toUpperCase()}</Text>
           ) : null}
         </View>
-        <Text style={styles.sessionDuration}>{formatDuration(item.durationMs).toUpperCase()}</Text>
+        <Text style={styles.sessionDuration} numberOfLines={1}>
+          {formatDuration(item.durationMs).toUpperCase()}
+        </Text>
       </PixelBox>
     );
   }, []);
 
   const stat = (label: string, ms: number) => (
-    <PixelBox shadow={4} style={styles.statWrap} boxStyle={styles.statBox}>
+    <PixelBox shadow={0} style={styles.statWrap} boxStyle={styles.statBox}>
       <Text style={styles.statLabel}>{label}</Text>
-      <Text style={styles.statValue}>{formatDuration(ms).toUpperCase()}</Text>
+      <Text style={styles.statValue} numberOfLines={1} adjustsFontSizeToFit>
+        {formatDuration(ms).toUpperCase()}
+      </Text>
     </PixelBox>
   );
 
   const listHeader = (
     <View style={styles.header}>
       <View>
-        <Text style={styles.title}>STUDY STATS</Text>
+        <Text style={styles.title} accessibilityRole="header">
+          STUDY STATS
+        </Text>
         <Text style={styles.subtitle}>OVERVIEW OF YOUR FOCUSED TIME</Text>
       </View>
 
@@ -131,16 +139,26 @@ export default function Dashboard({ isActive = true, refreshKey = 0 }: Dashboard
       <StudyGraph sessions={sessions} weekStartsOn={settings.weekStartsOn} />
 
       {bestDayMs > 0 ? (
-        <View style={styles.progressBlock}>
-          <PixelProgress value={progressPercent / 100} />
+        <PixelBox shadow={0} boxStyle={styles.progressBox}>
+          <View style={styles.progressHeader}>
+            <Text style={styles.sectionTitle} accessibilityRole="header">
+              VS BEST DAY
+            </Text>
+            <Text style={styles.progressValue}>{progressPercent}%</Text>
+          </View>
+          <View style={styles.progressBlock}>
+            <PixelProgress value={progressPercent / 100} />
+          </View>
           <Text style={styles.caption}>
-            {progressPercent}% OF YOUR BEST DAY — {formatDuration(bestDayMs).toUpperCase()}
+            BEST THIS WEEK — {formatDuration(bestDayMs).toUpperCase()}
           </Text>
-        </View>
+        </PixelBox>
       ) : null}
 
       <View style={styles.sectionHeader}>
-        <Text style={styles.sectionTitle}>TODAY'S SESSIONS</Text>
+        <Text style={styles.sectionTitle} accessibilityRole="header">
+          TODAY'S SESSIONS
+        </Text>
         {todaySessions.length > 0 ? (
           <Text style={styles.caption}>
             {todaySessions.length} {todaySessions.length === 1 ? 'SESSION' : 'SESSIONS'}
@@ -150,7 +168,9 @@ export default function Dashboard({ isActive = true, refreshKey = 0 }: Dashboard
 
       {!hasAnySessions && (
         <PixelBox shadow={0} boxStyle={styles.emptyBox}>
-          <Text style={styles.emptyTitle}>NO STUDY SESSIONS YET</Text>
+          <Text style={styles.emptyTitle} accessibilityRole="header">
+            NO STUDY SESSIONS YET
+          </Text>
           <Text style={styles.emptyBody}>
             Finish a session of at least 1 minute and your totals will show up here.
           </Text>
@@ -169,6 +189,7 @@ export default function Dashboard({ isActive = true, refreshKey = 0 }: Dashboard
 
   return (
     <View style={styles.screen}>
+      <PixelBox shadow={6} style={styles.frameWrap} boxStyle={styles.frame}>
       <FlatList
         data={todaySessions}
         keyExtractor={(item) => item.id}
@@ -181,23 +202,34 @@ export default function Dashboard({ isActive = true, refreshKey = 0 }: Dashboard
         }
         showsVerticalScrollIndicator={false}
       />
+      </PixelBox>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  screen: { flex: 1, width: '100%', backgroundColor: T.bg, paddingHorizontal: 16, paddingTop: 12 },
-  header: { gap: 22, paddingBottom: 18 },
-  title: { fontFamily: T.fontPixel, fontSize: 14, color: T.ink },
+  screen: { flex: 1, width: '100%', backgroundColor: T.bg, paddingHorizontal: 16, paddingTop: 4 },
+  frameWrap: { flex: 1 },
+  frame: { flex: 1, paddingHorizontal: 14, paddingTop: 14 },
+  header: { gap: 20, paddingBottom: 16 },
+  title: { fontFamily: T.fontPixel, fontSize: 13, color: T.ink },
   subtitle: { fontFamily: T.fontPixel, fontSize: 8, color: T.muted, marginTop: 10 },
 
   statRow: { flexDirection: 'row', gap: 8 },
   statWrap: { flex: 1 },
-  statBox: { paddingVertical: 14, paddingHorizontal: 6, alignItems: 'center' },
+  statBox: {
+    paddingVertical: 14,
+    paddingHorizontal: 6,
+    alignItems: 'center',
+    backgroundColor: T.secondary,
+  },
   statLabel: { fontFamily: T.fontPixel, fontSize: 8, color: T.muted },
-  statValue: { fontFamily: T.fontPixel, fontSize: 11, color: T.ink, marginTop: 10 },
+  statValue: { fontFamily: T.fontPixel, fontSize: 13, color: T.ink, marginTop: 10 },
 
-  progressBlock: { gap: 8 },
+  progressBox: { padding: 14, backgroundColor: T.secondary },
+  progressHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  progressValue: { fontFamily: T.fontPixel, fontSize: 13, color: T.ink },
+  progressBlock: { marginVertical: 12 },
   caption: { fontFamily: T.fontPixel, fontSize: 8, color: T.muted },
 
   sectionHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
@@ -215,7 +247,7 @@ const styles = StyleSheet.create({
   sessionText: { flex: 1, marginRight: 12 },
   sessionSubject: { fontFamily: T.fontPixel, fontSize: 9, color: T.ink },
   sessionTime: { fontFamily: T.fontPixel, fontSize: 8, color: T.muted, marginTop: 8 },
-  sessionDuration: { fontFamily: T.fontPixel, fontSize: 9, color: T.primary },
+  sessionDuration: { fontFamily: T.fontPixel, fontSize: 9, color: T.ink },
 
   emptyBox: { padding: 16, backgroundColor: T.secondary },
   emptyTitle: { fontFamily: T.fontPixel, fontSize: 9, color: T.ink },

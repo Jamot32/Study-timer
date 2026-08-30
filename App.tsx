@@ -61,7 +61,7 @@ export default function App() {
               contentContainerStyle={styles.timerScroll}
               showsVerticalScrollIndicator={false}
             >
-              <StudyTimer />
+              <StudyTimer onFinished={() => setRefreshKey((k) => k + 1)} />
             </ScrollView>
           </TabsContent>
 

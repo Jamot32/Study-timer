@@ -92,6 +92,7 @@ export default function Settings({ onChanged }: SettingsProps) {
       contentContainerStyle={{ paddingBottom: 40 }}
       showsVerticalScrollIndicator={false}
     >
+      <PixelBox shadow={6} boxStyle={styles.frame}>
       <View style={styles.body}>
         <View>
           <Text style={styles.title} accessibilityRole="header">
@@ -140,17 +141,20 @@ export default function Settings({ onChanged }: SettingsProps) {
           </PixelButton>
         </PixelBox>
       </View>
+      </PixelBox>
     </ScrollView>
   );
 }
 
 const styles = StyleSheet.create({
-  screen: { flex: 1, width: '100%', backgroundColor: T.bg, paddingHorizontal: 16 },
-  body: { gap: 20, paddingTop: 12 },
+  screen: { flex: 1, width: '100%', backgroundColor: T.bg, paddingHorizontal: 16, paddingTop: 4 },
+  frame: { padding: 14 },
+  body: { gap: 18 },
   title: { fontFamily: T.fontPixel, fontSize: 13, color: T.ink },
   subtitle: { fontFamily: T.fontPixel, fontSize: 8, color: T.muted, marginTop: 10 },
 
   card: { padding: 14, backgroundColor: T.secondary },
+  // cards are flat panels inside the frame, matching the timer's break-bank card
   cardTitle: { fontFamily: T.fontPixel, fontSize: 9, color: T.ink },
   cardDesc: { fontFamily: T.fontPixel, fontSize: 8, lineHeight: 14, color: T.muted, marginTop: 8 },
 

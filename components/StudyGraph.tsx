@@ -12,8 +12,9 @@ import {
 
 const WEEKS = 12;
 
-/** Empty → busiest, on the pixel palette (cream → burnt orange). */
-const LEVEL_COLOR = ['#e3dcc9', '#f2b98f', '#eb9463', '#d95b2e', '#a93d17'];
+/** Empty → busiest. Endpoints are the palette tokens; the mid-tones are
+ *  interpolated between them, since the palette has no 5-step ramp. */
+const LEVEL_COLOR = [T.bg, '#f2b98f', '#eb9463', T.primary, '#a93d17'];
 
 export interface StudyGraphProps {
   sessions: StudySession[];
@@ -109,8 +110,8 @@ const styles = StyleSheet.create({
   headerRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   title: { fontFamily: T.fontPixel, fontSize: 10, color: T.ink },
   caption: { fontFamily: T.fontPixel, fontSize: 8, color: T.muted },
-  grid: { flexDirection: 'row', gap: 3, borderWidth: 2, borderColor: T.ink, padding: 4 },
-  week: { flex: 1, gap: 3 },
+  grid: { flexDirection: 'row', gap: 2, borderWidth: 2, borderColor: T.ink, padding: 3, backgroundColor: T.secondary },
+  week: { flex: 1, gap: 2 },
   cell: { aspectRatio: 1, borderWidth: 1, borderColor: T.ink },
   legend: { flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-end', gap: 4 },
   legendCell: { width: 10, height: 10, borderWidth: 1, borderColor: T.ink },
