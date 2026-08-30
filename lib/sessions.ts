@@ -180,6 +180,9 @@ export function formatDuration(ms: number): string {
   if (hours > 0) {
     return minutes > 0 ? `${hours}h ${minutes}m` : `${hours}h`;
   }
+  // a saved sub-minute session (the minimum is configurable down to 30s)
+  // would otherwise read as "0m"
+  if (totalMinutes === 0 && ms > 0) return `${Math.round(ms / 1000)}s`;
   return `${minutes}m`;
 }
 

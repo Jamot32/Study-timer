@@ -1,8 +1,6 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { Pressable, ScrollView, View } from 'react-native';
-import { Card, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Separator } from '@/components/ui/separator';
-import { Text } from '@/components/ui/text';
+import { ScrollView, StyleSheet, Text, View } from 'react-native';
+import { PixelBox, PixelButton, T } from '@/components/pixel';
 import { confirmDestructive } from '@/lib/confirm';
 import { clearSessions } from '@/lib/sessions';
 import {
@@ -11,48 +9,42 @@ import {
   saveSettings,
   type Settings as SettingsValue,
 } from '@/lib/settings';
-import { cn } from '@/lib/utils';
 
 const WEEK_START_CHOICES = [
-  { label: 'Monday', value: 1 as const },
-  { label: 'Sunday', value: 0 as const },
+  { label: 'MONDAY', value: 1 as const },
+  { label: 'SUNDAY', value: 0 as const },
 ];
 
-// ponytail: no shadow-* on the selected segment — NativeWind 4.2.6 wedges the
-// iOS JS thread when a shadow class is toggled at runtime. See components/ui/tabs.tsx.
-function Segmented<T>({
+function Segmented<T_ extends string | number>({
   choices,
   value,
   onChange,
 }: {
-  choices: { label: string; value: T }[];
-  value: T;
-  onChange: (value: T) => void;
+  choices: { label: string; value: T_ }[];
+  value: T_;
+  onChange: (value: T_) => void;
 }) {
   return (
-    <View className="flex-row bg-zinc-900 border border-zinc-800/80 rounded-xl p-1 gap-1">
+    <View style={styles.segmented}>
       {choices.map((choice) => {
         const selected = choice.value === value;
         return (
-          <Pressable
+          <PixelButton
             key={String(choice.value)}
-            accessibilityRole="button"
+            shadow={2}
+            color={selected ? T.primary : T.bg}
             accessibilityState={{ selected }}
             onPress={() => onChange(choice.value)}
-            className={cn(
-              'flex-1 items-center justify-center rounded-lg py-2',
-              selected && 'bg-zinc-800'
-            )}
+            style={styles.segment}
+            boxStyle={styles.segmentBox}
           >
             <Text
-              className={cn(
-                'text-sm font-medium',
-                selected ? 'text-zinc-100' : 'text-zinc-500'
-              )}
+              style={[styles.segmentLabel, { color: selected ? T.primaryFg : T.muted }]}
+              numberOfLines={1}
             >
-              {choice.label}
+              {choice.label.toUpperCase()}
             </Text>
-          </Pressable>
+          </PixelButton>
         );
       })}
     </View>
@@ -96,70 +88,82 @@ export default function Settings({ onChanged }: SettingsProps) {
 
   return (
     <ScrollView
-      className="flex-1 w-full px-4"
+      style={styles.screen}
       contentContainerStyle={{ paddingBottom: 40 }}
       showsVerticalScrollIndicator={false}
     >
-      <View className="gap-5 pt-2">
+      <PixelBox shadow={6} boxStyle={styles.frame}>
+      <View style={styles.body}>
         <View>
-          <Text className="text-2xl font-semibold tracking-tight text-zinc-100">Settings</Text>
-          <Text className="text-xs text-zinc-500 mt-0.5">
-            Applies to how your study time is counted
+          <Text style={styles.title} accessibilityRole="header">
+            CONFIG
           </Text>
+          <Text style={styles.subtitle}>HOW YOUR STUDY TIME IS COUNTED</Text>
         </View>
 
-        <Card className="py-4 gap-3 border-border/60 bg-zinc-900/50">
-          <CardHeader className="p-0 px-4">
-            <CardTitle className="text-base text-zinc-200">Week starts on</CardTitle>
-            <CardDescription className="text-xs mt-1 text-zinc-500">
-              Sets the boundary for the "This Week" total.
-            </CardDescription>
-          </CardHeader>
-          <View className="px-4">
-            <Segmented
-              choices={WEEK_START_CHOICES}
-              value={settings.weekStartsOn}
-              onChange={(weekStartsOn) => update({ weekStartsOn })}
-            />
-          </View>
-        </Card>
+        <PixelBox shadow={0} boxStyle={styles.card}>
+          <Text style={styles.cardTitle} accessibilityRole="header">
+            WEEK STARTS ON
+          </Text>
+          <Text style={styles.cardDesc}>Sets the boundary for the WEEK total.</Text>
+          <Segmented
+            choices={WEEK_START_CHOICES}
+            value={settings.weekStartsOn}
+            onChange={(weekStartsOn) => update({ weekStartsOn })}
+          />
+        </PixelBox>
 
-        <Card className="py-4 gap-3 border-border/60 bg-zinc-900/50">
-          <CardHeader className="p-0 px-4">
-            <CardTitle className="text-base text-zinc-200">Minimum session</CardTitle>
-            <CardDescription className="text-xs mt-1 text-zinc-500">
-              Sessions shorter than this are discarded instead of saved.
-            </CardDescription>
-          </CardHeader>
-          <View className="px-4">
-            <Segmented
-              choices={MIN_SESSION_CHOICES}
-              value={settings.minSessionMs}
-              onChange={(minSessionMs) => update({ minSessionMs })}
-            />
-          </View>
-        </Card>
+        <PixelBox shadow={0} boxStyle={styles.card}>
+          <Text style={styles.cardTitle} accessibilityRole="header">
+            MINIMUM SESSION
+          </Text>
+          <Text style={styles.cardDesc}>Sessions shorter than this are discarded, not saved.</Text>
+          <Segmented
+            choices={MIN_SESSION_CHOICES}
+            value={settings.minSessionMs}
+            onChange={(minSessionMs) => update({ minSessionMs })}
+          />
+        </PixelBox>
 
-        <Separator />
-
-        <Card className="py-4 gap-3 border-dashed border-border/60 bg-zinc-900/20">
-          <CardHeader className="p-0 px-4">
-            <CardTitle className="text-base text-zinc-200">Study history</CardTitle>
-            <CardDescription className="text-xs mt-1 text-zinc-500">
-              Sessions are stored on this device only.
-            </CardDescription>
-          </CardHeader>
-          <View className="px-4">
-            <Pressable
-              accessibilityRole="button"
-              onPress={handleClear}
-              className="items-center justify-center rounded-xl py-3 bg-zinc-900 border border-zinc-800 active:bg-zinc-800"
-            >
-              <Text className="text-sm font-medium text-zinc-300">Clear all history</Text>
-            </Pressable>
-          </View>
-        </Card>
+        <PixelBox shadow={0} boxStyle={styles.card}>
+          <Text style={styles.cardTitle} accessibilityRole="header">
+            STUDY HISTORY
+          </Text>
+          <Text style={styles.cardDesc}>Sessions are stored on this device only.</Text>
+          <PixelButton
+            shadow={2}
+            color={T.bg}
+            onPress={handleClear}
+            style={styles.clearWrap}
+            boxStyle={styles.clearBox}
+          >
+            <Text style={styles.clearLabel}>CLEAR ALL HISTORY</Text>
+          </PixelButton>
+        </PixelBox>
       </View>
+      </PixelBox>
     </ScrollView>
   );
 }
+
+const styles = StyleSheet.create({
+  screen: { flex: 1, width: '100%', backgroundColor: T.bg, paddingHorizontal: 16, paddingTop: 4 },
+  frame: { padding: 14 },
+  body: { gap: 18 },
+  title: { fontFamily: T.fontPixel, fontSize: 13, color: T.ink },
+  subtitle: { fontFamily: T.fontPixel, fontSize: 8, color: T.muted, marginTop: 10 },
+
+  card: { padding: 14, backgroundColor: T.secondary },
+  // cards are flat panels inside the frame, matching the timer's break-bank card
+  cardTitle: { fontFamily: T.fontPixel, fontSize: 9, color: T.ink },
+  cardDesc: { fontFamily: T.fontPixel, fontSize: 8, lineHeight: 14, color: T.muted, marginTop: 8 },
+
+  segmented: { flexDirection: 'row', gap: 8, marginTop: 14 },
+  segment: { flex: 1 },
+  segmentBox: { height: 38, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 2 },
+  segmentLabel: { fontFamily: T.fontPixel, fontSize: 8 },
+
+  clearWrap: { marginTop: 14 },
+  clearBox: { height: 40, alignItems: 'center', justifyContent: 'center' },
+  clearLabel: { fontFamily: T.fontPixel, fontSize: 8, color: T.ink },
+});

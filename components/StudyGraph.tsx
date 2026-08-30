@@ -1,6 +1,6 @@
 import React, { useMemo } from 'react';
-import { View } from 'react-native';
-import { Text } from '@/components/ui/text';
+import { StyleSheet, Text, View } from 'react-native';
+import { T } from '@/components/pixel';
 import {
   dailyTotals,
   dayKey,
@@ -12,8 +12,9 @@ import {
 
 const WEEKS = 12;
 
-/** zinc-800 → zinc-100. Monochrome to match the rest of the app. */
-const LEVEL_CLASS = ['bg-zinc-800/70', 'bg-zinc-700', 'bg-zinc-500', 'bg-zinc-300', 'bg-zinc-100'];
+/** Empty → busiest. Endpoints are the palette tokens; the mid-tones are
+ *  interpolated between them, since the palette has no 5-step ramp. */
+const LEVEL_COLOR = [T.bg, '#f2b98f', '#eb9463', T.primary, '#a93d17'];
 
 export interface StudyGraphProps {
   sessions: StudySession[];
@@ -65,37 +66,53 @@ export default function StudyGraph({ sessions, weekStartsOn }: StudyGraphProps) 
   }, [sessions, weekStartsOn]);
 
   return (
-    <View className="gap-2.5">
-      <View className="flex-row items-baseline justify-between">
-        <Text className="text-base font-medium text-zinc-200">Last 12 Weeks</Text>
-        <Text className="text-xs text-zinc-500">
-          {formatDuration(totalMs)} over {activeDays} {activeDays === 1 ? 'day' : 'days'}
+    <View style={styles.wrap}>
+      <View style={styles.headerRow}>
+        <Text style={styles.title}>LAST 12 WEEKS</Text>
+        <Text style={styles.caption}>
+          {formatDuration(totalMs).toUpperCase()} / {activeDays} {activeDays === 1 ? 'DAY' : 'DAYS'}
         </Text>
       </View>
 
-      <View className="flex-row gap-1.5">
+      <View style={styles.grid}>
         {columns.map((week, w) => (
-          <View key={w} className="flex-1 gap-1">
+          <View key={w} style={styles.week}>
             {week.map((day) => (
               <View
                 key={day.key}
                 accessibilityLabel={`${day.key}: ${formatDuration(day.ms)} studied`}
-                className={`aspect-square rounded-[2px] ${
-                  day.future ? 'bg-transparent' : LEVEL_CLASS[level(day.ms, maxMs)]
-                }`}
+                style={[
+                  styles.cell,
+                  day.future
+                    ? { backgroundColor: 'transparent', borderColor: 'transparent' }
+                    : { backgroundColor: LEVEL_COLOR[level(day.ms, maxMs)] },
+                ]}
               />
             ))}
           </View>
         ))}
       </View>
 
-      <View className="flex-row items-center justify-end gap-1">
-        <Text className="text-[10px] text-zinc-600 mr-0.5">Less</Text>
-        {LEVEL_CLASS.map((cls) => (
-          <View key={cls} className={`w-2.5 h-2.5 rounded-[2px] ${cls}`} />
+      <View style={styles.legend}>
+        <Text style={styles.caption}>LESS</Text>
+        {LEVEL_COLOR.map((color) => (
+          <View key={color} style={[styles.legendCell, { backgroundColor: color }]} />
         ))}
-        <Text className="text-[10px] text-zinc-600 ml-0.5">More</Text>
+        <Text style={styles.caption}>MORE</Text>
       </View>
     </View>
   );
+
 }
+
+const styles = StyleSheet.create({
+  wrap: { gap: 10 },
+  headerRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  title: { fontFamily: T.fontPixel, fontSize: 10, color: T.ink },
+  caption: { fontFamily: T.fontPixel, fontSize: 8, color: T.muted },
+  grid: { flexDirection: 'row', gap: 2, borderWidth: 2, borderColor: T.ink, padding: 3, backgroundColor: T.secondary },
+  week: { flex: 1, gap: 2 },
+  cell: { aspectRatio: 1, borderWidth: 1, borderColor: T.ink },
+  legend: { flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-end', gap: 4 },
+  legendCell: { width: 10, height: 10, borderWidth: 1, borderColor: T.ink },
+});
