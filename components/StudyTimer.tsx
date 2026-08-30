@@ -1,9 +1,8 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Alert, Pressable, StyleSheet, Text, View, type StyleProp, type ViewStyle } from 'react-native'
 import { LinearGradient } from 'expo-linear-gradient'
-import { Check, Moon, Pause, Play, RotateCcw, Settings2, Sun } from 'lucide-react-native'
+import { BarChart3, Check, Moon, Pause, Play, RotateCcw, Settings2, Sun } from 'lucide-react-native'
 import { confirmDestructive } from '../lib/confirm'
-import { loadSettings, minSessionLabel } from '../lib/settings'
 import { useStudyTimer } from '../lib/useStudyTimer'
 
 // ============================================================
@@ -214,7 +213,15 @@ function PixelProgress({ value }: { value: number }) {
 }
 
 // ---------- 메인 컴포넌트 ----------
-export function StudyTimer({ onFinished }: { onFinished?: () => void }) {
+export function StudyTimer({
+  onFinished,
+  onOpenStats,
+  onOpenSettings,
+}: {
+  onFinished?: () => void
+  onOpenStats?: () => void
+  onOpenSettings?: () => void
+}) {
   const [mode, setMode] = useState<'FOCUS' | 'SHORT BREAK'>('FOCUS')
   const [breakBank, setBreakBank] = useState(0)
   const [streakBroken, setStreakBroken] = useState(false)
@@ -285,15 +292,7 @@ export function StudyTimer({ onFinished }: { onFinished?: () => void }) {
     try {
       const session = await finish()
       earnedHours.current = 0
-      if (session === null) {
-        const { minSessionMs } = await loadSettings()
-        Alert.alert(
-          'Session Discarded',
-          `Sessions shorter than ${minSessionLabel(minSessionMs)} are not saved to history.`
-        )
-      } else {
-        onFinished?.()
-      }
+      if (session !== null) onFinished?.()
     } catch (error) {
       console.error('Failed to finish session:', error)
       Alert.alert('Error', 'Failed to save session.')
@@ -356,14 +355,26 @@ export function StudyTimer({ onFinished }: { onFinished?: () => void }) {
               </View>
             </View>
           </View>
-          <PixelButton
-            shadow={0}
-            color={T.secondary}
-            accessibilityLabel="Open timer settings"
-            boxStyle={styles.iconButtonSmall}
-          >
-            <Settings2 size={20} color={T.ink} />
-          </PixelButton>
+          <View style={styles.headerActions}>
+            <PixelButton
+              shadow={0}
+              color={T.secondary}
+              onPress={onOpenStats}
+              accessibilityLabel="Open study stats"
+              boxStyle={styles.iconButtonSmall}
+            >
+              <BarChart3 size={20} color={T.ink} />
+            </PixelButton>
+            <PixelButton
+              shadow={0}
+              color={T.secondary}
+              onPress={onOpenSettings}
+              accessibilityLabel="Open settings"
+              boxStyle={styles.iconButtonSmall}
+            >
+              <Settings2 size={20} color={T.ink} />
+            </PixelButton>
+          </View>
         </View>
 
         {/* 상태 줄 */}
@@ -499,6 +510,7 @@ const styles = StyleSheet.create({
     paddingVertical: 14,
   },
   headerLeft: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  headerActions: { flexDirection: 'row', gap: 8 },
   avatar: {
     width: 40,
     height: 40,
