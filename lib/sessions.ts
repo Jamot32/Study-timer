@@ -21,7 +21,6 @@ export type StudySession = {
 /** 0 = Sunday, 1 = Monday. */
 export type WeekStart = 0 | 1;
 
-export const MIN_SESSION_MS = 60000;
 export const SESSIONS_STORAGE_KEY = '@study_timer/sessions';
 
 function generateId(): string {
@@ -51,19 +50,12 @@ export async function loadSessions(): Promise<StudySession[]> {
   }
 }
 
-export async function saveSession(
-  input: {
-    startedAt: string;
-    endedAt: string;
-    durationMs: number;
-    subject?: string | null;
-  },
-  minSessionMs: number = MIN_SESSION_MS
-): Promise<StudySession | null> {
-  if (input.durationMs < minSessionMs) {
-    return null;
-  }
-
+export async function saveSession(input: {
+  startedAt: string;
+  endedAt: string;
+  durationMs: number;
+  subject?: string | null;
+}): Promise<StudySession | null> {
   const nowIso = new Date().toISOString();
   const session: StudySession = {
     id: generateId(),

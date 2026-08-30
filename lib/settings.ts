@@ -1,28 +1,14 @@
-import { MIN_SESSION_MS, storage, type WeekStart } from './sessions';
+import { storage, type WeekStart } from './sessions';
 
 export const SETTINGS_STORAGE_KEY = '@study_timer/settings';
 
 export type Settings = {
   weekStartsOn: WeekStart;
-  minSessionMs: number; // sessions shorter than this are discarded
 };
 
 export const DEFAULT_SETTINGS: Settings = {
   weekStartsOn: 1,
-  minSessionMs: MIN_SESSION_MS,
 };
-
-export const MIN_SESSION_CHOICES = [
-  { label: '30s', value: 30000 },
-  { label: '1 min', value: 60000 },
-  { label: '5 min', value: 300000 },
-];
-
-export function minSessionLabel(ms: number): string {
-  return (
-    MIN_SESSION_CHOICES.find((c) => c.value === ms)?.label ?? `${Math.round(ms / 1000)}s`
-  );
-}
 
 export async function loadSettings(): Promise<Settings> {
   try {
