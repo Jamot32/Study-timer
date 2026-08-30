@@ -1,9 +1,10 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { Alert, Pressable, StyleSheet, Text, View, type StyleProp, type ViewStyle } from 'react-native'
+import { Alert, AppState, Pressable, StyleSheet, Text, View, type StyleProp, type ViewStyle } from 'react-native'
 import { LinearGradient } from 'expo-linear-gradient'
 import { BarChart3, Check, Moon, Pause, Play, RotateCcw, Settings2, Sun } from 'lucide-react-native'
 import { confirmDestructive } from '../lib/confirm'
 import { useStudyTimer } from '../lib/useStudyTimer'
+import { awayOutcome } from '../lib/away'
 
 // ============================================================
 // PIXEL STUDY TIMER — React Native (Expo)
@@ -217,10 +218,13 @@ export function StudyTimer({
   onFinished,
   onOpenStats,
   onOpenSettings,
+  profileName,
 }: {
   onFinished?: () => void
   onOpenStats?: () => void
   onOpenSettings?: () => void
+  /** Name of the logged-in profile; drives the header avatar and name. */
+  profileName?: string
 }) {
   const [mode, setMode] = useState<'FOCUS' | 'SHORT BREAK'>('FOCUS')
   const [breakBank, setBreakBank] = useState(0)
@@ -301,6 +305,47 @@ export function StudyTimer({
     }
   }, [elapsedMs, endBreak, finish, isFinishing, onBreak, onFinished])
 
+  // Leaving the app stops the clock; coming back resumes it. Stay away longer
+  // than the limit without being on a paid break and the session is banked.
+  // The listener is registered once, so it reads live values through a ref.
+  const live = useRef({ onBreak, isRunning, hasTime: elapsedMs > 0, handleFinish, resetFocus, toggle })
+  live.current = { onBreak, isRunning, hasTime: elapsedMs > 0, handleFinish, resetFocus, toggle }
+
+  useEffect(() => {
+    const leftAt = { at: null as number | null, wasRunning: false }
+    const subscription = AppState.addEventListener('change', (next) => {
+      const { onBreak, isRunning, hasTime, handleFinish, resetFocus, toggle } = live.current
+
+      if (next === 'active') {
+        if (leftAt.at === null) return
+        const awayMs = Date.now() - leftAt.at
+        const wasRunning = leftAt.wasRunning
+        leftAt.at = null
+        switch (awayOutcome(awayMs, { onBreak, hasTime, wasRunning })) {
+          case 'finish':
+            handleFinish()
+            break
+          case 'reset':
+            resetFocus()
+            break
+          case 'resume':
+            toggle()
+            break
+        }
+        return
+      }
+
+      // 'inactive' is a transient iOS state (notification shade, app switcher);
+      // only a real background counts as leaving.
+      if (next === 'background' && leftAt.at === null) {
+        leftAt.at = Date.now()
+        leftAt.wasRunning = isRunning && !onBreak
+        if (leftAt.wasRunning) toggle()
+      }
+    })
+    return () => subscription.remove()
+  }, [])
+
   const reset = () => {
     if (onBreak) {
       endBreak()
@@ -333,6 +378,9 @@ export function StudyTimer({
     setMode('SHORT BREAK')
   }
 
+  const name = (profileName?.trim() || 'GUEST').toUpperCase()
+  const initials = name.slice(0, 2)
+
   const time = useMemo(() => formatTime(elapsed), [elapsed])
   const SkyIcon = isDay ? Sun : Moon
 
@@ -345,12 +393,14 @@ export function StudyTimer({
         <View style={styles.header}>
           <View style={styles.headerLeft}>
             <PixelBox shadow={3} boxStyle={styles.avatar}>
-              <Text style={styles.avatarText}>YU</Text>
+              <Text style={styles.avatarText}>{initials}</Text>
             </PixelBox>
             <View>
               <Text style={styles.label}>USERNAME</Text>
               <View style={styles.nameRow}>
-                <Text style={styles.name}>YUNA</Text>
+                <Text style={styles.name} numberOfLines={1}>
+                  {name}
+                </Text>
                 <Text style={styles.level}>LVL 04</Text>
               </View>
             </View>

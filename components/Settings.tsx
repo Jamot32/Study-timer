@@ -3,6 +3,7 @@ import React, { useCallback, useEffect, useState } from 'react';
 import { ScrollView, StyleSheet, Text, View } from 'react-native';
 import { PixelBox, PixelButton, T } from '@/components/pixel';
 import { confirmDestructive } from '@/lib/confirm';
+import { clearProfile } from '@/lib/auth';
 import { clearSessions } from '@/lib/sessions';
 import { loadSettings, saveSettings, type Settings as SettingsValue } from '@/lib/settings';
 
@@ -52,9 +53,13 @@ export interface SettingsProps {
   onChanged?: () => void;
   /** Back to the timer. */
   onBack?: () => void;
+  /** Name of the signed-in (local) profile. */
+  profileName?: string;
+  /** Called after the profile is cleared. */
+  onSignOut?: () => void;
 }
 
-export default function Settings({ onChanged, onBack }: SettingsProps) {
+export default function Settings({ onChanged, onBack, profileName, onSignOut }: SettingsProps) {
   const [settings, setSettings] = useState<SettingsValue | null>(null);
 
   useEffect(() => {
@@ -81,6 +86,11 @@ export default function Settings({ onChanged, onBack }: SettingsProps) {
       }
     );
   }, [onChanged]);
+
+  const handleSignOut = useCallback(async () => {
+    await clearProfile();
+    onSignOut?.();
+  }, [onSignOut]);
 
   if (!settings) return null;
 
@@ -121,6 +131,26 @@ export default function Settings({ onChanged, onBack }: SettingsProps) {
             onChange={(weekStartsOn) => update({ weekStartsOn })}
           />
         </PixelBox>
+
+        {profileName ? (
+          <PixelBox shadow={0} boxStyle={styles.card}>
+            <Text style={styles.cardTitle} accessibilityRole="header">
+              ACCOUNT
+            </Text>
+            <Text style={styles.cardDesc}>
+              SIGNED IN AS {profileName.toUpperCase()}. THIS DEVICE ONLY — NOTHING IS SYNCED YET.
+            </Text>
+            <PixelButton
+              shadow={2}
+              color={T.bg}
+              onPress={handleSignOut}
+              style={styles.clearWrap}
+              boxStyle={styles.clearBox}
+            >
+              <Text style={styles.clearLabel}>SIGN OUT</Text>
+            </PixelButton>
+          </PixelBox>
+        ) : null}
 
         <PixelBox shadow={0} boxStyle={styles.card}>
           <Text style={styles.cardTitle} accessibilityRole="header">
