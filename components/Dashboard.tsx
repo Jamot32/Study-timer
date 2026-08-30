@@ -1,10 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { FlatList, RefreshControl, View } from 'react-native';
-import { Card, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Progress } from '@/components/ui/progress';
-import { Separator } from '@/components/ui/separator';
-import { Text } from '@/components/ui/text';
+import { FlatList, RefreshControl, StyleSheet, Text, View } from 'react-native';
 import StudyGraph from '@/components/StudyGraph';
+import { PixelBox, PixelProgress, T } from '@/components/pixel';
 import {
   formatDuration,
   getWeekStart,
@@ -95,135 +92,132 @@ export default function Dashboard({ isActive = true, refreshKey = 0 }: Dashboard
   const hasAnySessions = sessions.length > 0;
 
   const renderItem = useCallback(({ item }: { item: StudySession }) => {
-    const subjectLabel = item.subject && item.subject.trim() ? item.subject : 'Unlabeled';
+    const subjectLabel = item.subject && item.subject.trim() ? item.subject : 'UNLABELED';
     const startTimeLabel = formatStartTime(item.startedAt);
 
     return (
-      <Card className="py-3 px-4 flex-row items-center justify-between border-border/60 bg-zinc-900/50">
-        <View className="flex-1 mr-3">
-          <Text className="font-medium text-base text-zinc-100">{subjectLabel}</Text>
+      <PixelBox shadow={3} style={styles.sessionGap} boxStyle={styles.sessionRow}>
+        <View style={styles.sessionText}>
+          <Text style={styles.sessionSubject}>{subjectLabel.toUpperCase()}</Text>
           {startTimeLabel ? (
-            <Text className="text-xs text-zinc-500 mt-0.5">
-              Started at {startTimeLabel}
-            </Text>
+            <Text style={styles.sessionTime}>STARTED {startTimeLabel.toUpperCase()}</Text>
           ) : null}
         </View>
-        <Text className="text-base font-semibold text-zinc-100">
-          {formatDuration(item.durationMs)}
-        </Text>
-      </Card>
+        <Text style={styles.sessionDuration}>{formatDuration(item.durationMs).toUpperCase()}</Text>
+      </PixelBox>
     );
   }, []);
 
-  const renderItemSeparator = useCallback(() => <Separator className="my-1.5" />, []);
+  const stat = (label: string, ms: number) => (
+    <PixelBox shadow={4} style={styles.statWrap} boxStyle={styles.statBox}>
+      <Text style={styles.statLabel}>{label}</Text>
+      <Text style={styles.statValue}>{formatDuration(ms).toUpperCase()}</Text>
+    </PixelBox>
+  );
 
   const listHeader = (
-    <View className="gap-5 pb-4">
-      <View className="pt-2">
-        <Text className="text-2xl font-semibold tracking-tight text-zinc-100">Study Stats</Text>
-        <Text className="text-xs text-zinc-500 mt-0.5">
-          Overview of your focused study time
-        </Text>
+    <View style={styles.header}>
+      <View>
+        <Text style={styles.title}>STUDY STATS</Text>
+        <Text style={styles.subtitle}>OVERVIEW OF YOUR FOCUSED TIME</Text>
       </View>
 
-      {/* Totals Section */}
-      <View className="flex-row gap-2.5">
-        <Card className="flex-1 py-4 px-2.5 items-center justify-center border-border/60 bg-zinc-900/50">
-          <Text className="text-[11px] font-medium uppercase tracking-widest text-zinc-500 mb-1">
-            Today
-          </Text>
-          <Text className="text-lg font-semibold text-zinc-100 text-center">
-            {formatDuration(todayMs)}
-          </Text>
-        </Card>
-
-        <Card className="flex-1 py-4 px-2.5 items-center justify-center border-border/60 bg-zinc-900/50">
-          <Text className="text-[11px] font-medium uppercase tracking-widest text-zinc-500 mb-1">
-            This Week
-          </Text>
-          <Text className="text-lg font-semibold text-zinc-100 text-center">
-            {formatDuration(weekMs)}
-          </Text>
-        </Card>
-
-        <Card className="flex-1 py-4 px-2.5 items-center justify-center border-border/60 bg-zinc-900/50">
-          <Text className="text-[11px] font-medium uppercase tracking-widest text-zinc-500 mb-1">
-            This Month
-          </Text>
-          <Text className="text-lg font-semibold text-zinc-100 text-center">
-            {formatDuration(monthMs)}
-          </Text>
-        </Card>
+      <View style={styles.statRow}>
+        {stat('TODAY', todayMs)}
+        {stat('WEEK', weekMs)}
+        {stat('MONTH', monthMs)}
       </View>
 
-      {/* Contribution-style heatmap of daily study time */}
       <StudyGraph sessions={sessions} weekStartsOn={settings.weekStartsOn} />
 
-      {/* Progress against best day this week */}
       {bestDayMs > 0 ? (
-        <View className="gap-1.5">
-          <Progress value={progressPercent} className="bg-zinc-800" indicatorClassName="bg-zinc-100" />
-          <Text className="text-xs text-zinc-500">
-            vs. your best day this week — {formatDuration(bestDayMs)}
+        <View style={styles.progressBlock}>
+          <PixelProgress value={progressPercent / 100} />
+          <Text style={styles.caption}>
+            {progressPercent}% OF YOUR BEST DAY — {formatDuration(bestDayMs).toUpperCase()}
           </Text>
         </View>
       ) : null}
 
-      {/* Separator between totals block and session list */}
-      <Separator />
-
-      {/* Sessions Section Header */}
-      <View className="flex-row items-center justify-between pt-1">
-        <Text className="text-base font-medium text-zinc-200">Today's Sessions</Text>
+      <View style={styles.sectionHeader}>
+        <Text style={styles.sectionTitle}>TODAY'S SESSIONS</Text>
         {todaySessions.length > 0 ? (
-          <Text className="text-xs text-zinc-500">
-            {todaySessions.length} {todaySessions.length === 1 ? 'session' : 'sessions'}
+          <Text style={styles.caption}>
+            {todaySessions.length} {todaySessions.length === 1 ? 'SESSION' : 'SESSIONS'}
           </Text>
         ) : null}
       </View>
 
-      {/* Global empty state when zero sessions have ever been recorded */}
       {!hasAnySessions && (
-        <Card className="p-6 items-center border-dashed border-border/60 bg-zinc-900/20">
-          <CardHeader className="p-0 items-center">
-            <CardTitle className="text-base text-center text-zinc-200">No study sessions yet</CardTitle>
-            <CardDescription className="text-center text-xs mt-1.5 leading-5 text-zinc-500">
-              When you complete a study session (at least 1 minute) and tap Finish, your recorded time
-              and daily, weekly, and monthly totals will appear here.
-            </CardDescription>
-          </CardHeader>
-        </Card>
+        <PixelBox shadow={0} boxStyle={styles.emptyBox}>
+          <Text style={styles.emptyTitle}>NO STUDY SESSIONS YET</Text>
+          <Text style={styles.emptyBody}>
+            Finish a session of at least 1 minute and your totals will show up here.
+          </Text>
+        </PixelBox>
       )}
     </View>
   );
 
   const listEmptyComponent = hasAnySessions ? (
-    <Card className="p-5 items-center justify-center border-dashed border-border/60 bg-zinc-900/20">
-      <Text className="text-xs text-zinc-500 text-center">
-        No sessions logged today yet. Start a session to track today's progress!
+    <PixelBox shadow={0} boxStyle={styles.emptyBox}>
+      <Text style={styles.emptyBody}>
+        No sessions logged today yet. Start one to track today's progress.
       </Text>
-    </Card>
+    </PixelBox>
   ) : null;
 
   return (
-    <View className="flex-1 w-full px-4">
+    <View style={styles.screen}>
       <FlatList
         data={todaySessions}
         keyExtractor={(item) => item.id}
         renderItem={renderItem}
-        ItemSeparatorComponent={renderItemSeparator}
         ListHeaderComponent={listHeader}
         ListEmptyComponent={listEmptyComponent}
         contentContainerStyle={{ paddingBottom: 40 }}
         refreshControl={
-          <RefreshControl
-            refreshing={refreshing}
-            onRefresh={onRefresh}
-            tintColor="#a1a1aa"
-          />
+          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={T.ink} />
         }
         showsVerticalScrollIndicator={false}
       />
     </View>
   );
 }
+
+const styles = StyleSheet.create({
+  screen: { flex: 1, width: '100%', backgroundColor: T.bg, paddingHorizontal: 16, paddingTop: 12 },
+  header: { gap: 22, paddingBottom: 18 },
+  title: { fontFamily: T.fontPixel, fontSize: 14, color: T.ink },
+  subtitle: { fontFamily: T.fontPixel, fontSize: 8, color: T.muted, marginTop: 10 },
+
+  statRow: { flexDirection: 'row', gap: 8 },
+  statWrap: { flex: 1 },
+  statBox: { paddingVertical: 14, paddingHorizontal: 6, alignItems: 'center' },
+  statLabel: { fontFamily: T.fontPixel, fontSize: 8, color: T.muted },
+  statValue: { fontFamily: T.fontPixel, fontSize: 11, color: T.ink, marginTop: 10 },
+
+  progressBlock: { gap: 8 },
+  caption: { fontFamily: T.fontPixel, fontSize: 8, color: T.muted },
+
+  sectionHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  sectionTitle: { fontFamily: T.fontPixel, fontSize: 10, color: T.ink },
+
+  sessionRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: 12,
+    paddingHorizontal: 12,
+    backgroundColor: T.secondary,
+  },
+  sessionGap: { marginBottom: 10 },
+  sessionText: { flex: 1, marginRight: 12 },
+  sessionSubject: { fontFamily: T.fontPixel, fontSize: 9, color: T.ink },
+  sessionTime: { fontFamily: T.fontPixel, fontSize: 8, color: T.muted, marginTop: 8 },
+  sessionDuration: { fontFamily: T.fontPixel, fontSize: 9, color: T.primary },
+
+  emptyBox: { padding: 16, backgroundColor: T.secondary },
+  emptyTitle: { fontFamily: T.fontPixel, fontSize: 9, color: T.ink },
+  emptyBody: { fontFamily: T.fontPixel, fontSize: 8, lineHeight: 14, color: T.muted, marginTop: 8 },
+});

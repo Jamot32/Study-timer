@@ -1,36 +1,44 @@
+import { useFonts, PressStart2P_400Regular } from '@expo-google-fonts/press-start-2p';
 import { StatusBar } from 'expo-status-bar';
 import React, { useCallback, useState } from 'react';
 import { Alert, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 import Dashboard from './components/Dashboard';
 import Settings from './components/Settings';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from './components/ui/tabs';
+import { Tabs, TabsContent } from './components/ui/tabs';
+import { PixelButton, T } from './components/pixel';
 import { confirmDestructive } from './lib/confirm';
 import { loadSettings, minSessionLabel } from './lib/settings';
 import { formatElapsed, useStudyTimer, type TimerState } from './lib/useStudyTimer';
-import { cn } from './lib/utils';
 
 const STATUS_LABEL: Record<TimerState, string> = {
-  ready: 'Ready',
-  running: 'Studying',
-  paused: 'Paused',
+  ready: 'READY',
+  running: 'STUDYING',
+  paused: 'PAUSED',
 };
 
 const STATUS_COLOR: Record<TimerState, string> = {
-  ready: '#71717a',
-  running: '#ffffff',
-  paused: '#a1a1aa',
+  ready: T.muted,
+  running: T.ink,
+  paused: T.muted,
 };
 
+const TABS: { value: Tab; label: string }[] = [
+  { value: 'timer', label: 'TIMER' },
+  { value: 'dashboard', label: 'STATS' },
+  { value: 'settings', label: 'CONFIG' },
+];
+
 const PRIMARY_LABEL: Record<TimerState, string> = {
-  ready: 'Start',
-  running: 'Pause',
-  paused: 'Resume',
+  ready: 'START',
+  running: 'PAUSE',
+  paused: 'RESUME',
 };
 
 type Tab = 'timer' | 'dashboard' | 'settings';
 
 export default function App() {
+  const [fontsLoaded, fontError] = useFonts({ PressStart2P_400Regular });
   const [activeTab, setActiveTab] = useState<Tab>('timer');
   const [refreshKey, setRefreshKey] = useState(0);
   const [isFinishing, setIsFinishing] = useState(false);
@@ -76,6 +84,10 @@ export default function App() {
     }
   }, [reset, resetDisabled, elapsedMs]);
 
+  // after every hook — an early return above them breaks hook order on load.
+  // fontError falls through to the system font rather than hanging on a blank screen.
+  if (!fontsLoaded && !fontError) return null;
+
   return (
     <SafeAreaProvider>
       <SafeAreaView style={styles.safeArea} edges={['top', 'left', 'right', 'bottom']}>
@@ -84,39 +96,25 @@ export default function App() {
           onValueChange={(val) => setActiveTab(val as Tab)}
           className="w-full flex-1 flex flex-col"
         >
-          <View className="px-6 pt-3 pb-2 items-center w-full max-w-sm mx-auto">
-            <TabsList className="w-full grid grid-cols-3 bg-zinc-900 border border-zinc-800/80 h-10 p-1 rounded-xl">
-              <TabsTrigger value="timer" className="rounded-lg">
-                <Text
-                  className={cn(
-                    'text-sm font-medium',
-                    activeTab === 'timer' ? 'text-zinc-100' : 'text-zinc-500'
-                  )}
+          <View style={styles.tabBar}>
+            {TABS.map((tab) => {
+              const selected = activeTab === tab.value;
+              return (
+                <PixelButton
+                  key={tab.value}
+                  shadow={4}
+                  color={selected ? T.primary : T.secondary}
+                  onPress={() => setActiveTab(tab.value)}
+                  accessibilityState={{ selected }}
+                  style={styles.tabItem}
+                  boxStyle={styles.tabBox}
                 >
-                  Timer
-                </Text>
-              </TabsTrigger>
-              <TabsTrigger value="dashboard" className="rounded-lg">
-                <Text
-                  className={cn(
-                    'text-sm font-medium',
-                    activeTab === 'dashboard' ? 'text-zinc-100' : 'text-zinc-500'
-                  )}
-                >
-                  Dashboard
-                </Text>
-              </TabsTrigger>
-              <TabsTrigger value="settings" className="rounded-lg">
-                <Text
-                  className={cn(
-                    'text-sm font-medium',
-                    activeTab === 'settings' ? 'text-zinc-100' : 'text-zinc-500'
-                  )}
-                >
-                  Settings
-                </Text>
-              </TabsTrigger>
-            </TabsList>
+                  <Text style={[styles.tabLabel, { color: selected ? T.primaryFg : T.muted }]}>
+                    {tab.label}
+                  </Text>
+                </PixelButton>
+              );
+            })}
           </View>
 
           <TabsContent value="timer" className="flex-1">
@@ -156,7 +154,7 @@ export default function App() {
                     disabled={finishDisabled}
                     style={[styles.button, styles.finishButton, finishDisabled && styles.disabled]}
                   >
-                    <Text style={[styles.buttonLabel, styles.finishLabel]}>Finish</Text>
+                    <Text style={[styles.buttonLabel, styles.finishLabel]}>FINISH</Text>
                   </TouchableOpacity>
 
                   <TouchableOpacity
@@ -166,7 +164,7 @@ export default function App() {
                     disabled={resetDisabled}
                     style={[styles.button, styles.resetButton, resetDisabled && styles.disabled]}
                   >
-                    <Text style={[styles.buttonLabel, styles.resetLabel]}>Reset</Text>
+                    <Text style={[styles.buttonLabel, styles.resetLabel]}>RESET</Text>
                   </TouchableOpacity>
                 </View>
               </View>
@@ -181,7 +179,7 @@ export default function App() {
             <Settings onChanged={() => setRefreshKey((k) => k + 1)} />
           </TabsContent>
         </Tabs>
-        <StatusBar style="light" />
+        <StatusBar style="dark" />
       </SafeAreaView>
     </SafeAreaProvider>
   );
@@ -190,8 +188,21 @@ export default function App() {
 const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
-    backgroundColor: '#09090b',
+    backgroundColor: T.bg,
   },
+  tabBar: {
+    flexDirection: 'row',
+    gap: 8,
+    width: '100%',
+    maxWidth: 420,
+    marginHorizontal: 'auto',
+    paddingHorizontal: 16,
+    paddingTop: 8,
+    paddingBottom: 6,
+  },
+  tabItem: { flex: 1 },
+  tabBox: { height: 40, alignItems: 'center', justifyContent: 'center' },
+  tabLabel: { fontFamily: T.fontPixel, fontSize: 9 },
   timerScreen: {
     flex: 1,
     alignItems: 'center',
@@ -205,19 +216,17 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   status: {
-    fontSize: 12,
-    fontWeight: '500',
+    fontFamily: T.fontPixel,
+    fontSize: 9,
     textTransform: 'uppercase',
-    letterSpacing: 3,
-    marginTop: 12,
+    marginTop: 20,
     marginBottom: 44,
   },
   display: {
-    fontSize: 60,
-    fontWeight: '200',
-    fontVariant: ['tabular-nums'],
-    letterSpacing: -0.5,
-    color: '#fafafa',
+    fontFamily: T.fontPixel,
+    fontSize: 32,
+    letterSpacing: -2,
+    color: T.ink,
   },
   controls: {
     flexDirection: 'row',
@@ -227,45 +236,40 @@ const styles = StyleSheet.create({
   button: {
     flex: 1,
     paddingVertical: 15,
-    borderRadius: 12,
+    borderWidth: 4,
+    borderColor: T.ink,
     alignItems: 'center',
     justifyContent: 'center',
   },
   primaryIdle: {
-    backgroundColor: '#ffffff',
+    backgroundColor: T.primary,
   },
   primaryRunning: {
-    backgroundColor: '#27272a',
-    borderWidth: 1,
-    borderColor: '#3f3f46',
+    backgroundColor: T.secondary,
   },
   finishButton: {
-    backgroundColor: '#18181b',
-    borderWidth: 1,
-    borderColor: '#27272a',
+    backgroundColor: T.secondary,
   },
   resetButton: {
-    backgroundColor: 'transparent',
-    borderWidth: 1,
-    borderColor: '#27272a',
+    backgroundColor: T.bg,
   },
   disabled: {
     opacity: 0.3,
   },
   buttonLabel: {
-    fontSize: 15,
-    fontWeight: '600',
+    fontFamily: T.fontPixel,
+    fontSize: 9,
   },
   primaryLabelIdle: {
-    color: '#09090b',
+    color: T.primaryFg,
   },
   primaryLabelRunning: {
-    color: '#ffffff',
+    color: T.ink,
   },
   finishLabel: {
-    color: '#f4f4f5',
+    color: T.ink,
   },
   resetLabel: {
-    color: '#71717a',
+    color: T.muted,
   },
 });
