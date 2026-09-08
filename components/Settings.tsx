@@ -1,14 +1,11 @@
+import { ArrowLeft } from 'lucide-react-native';
 import React, { useCallback, useEffect, useState } from 'react';
 import { ScrollView, StyleSheet, Text, View } from 'react-native';
 import { PixelBox, PixelButton, T } from '@/components/pixel';
 import { confirmDestructive } from '@/lib/confirm';
+import { clearProfile } from '@/lib/auth';
 import { clearSessions } from '@/lib/sessions';
-import {
-  loadSettings,
-  MIN_SESSION_CHOICES,
-  saveSettings,
-  type Settings as SettingsValue,
-} from '@/lib/settings';
+import { loadSettings, saveSettings, type Settings as SettingsValue } from '@/lib/settings';
 
 const WEEK_START_CHOICES = [
   { label: 'MONDAY', value: 1 as const },
@@ -54,9 +51,15 @@ function Segmented<T_ extends string | number>({
 export interface SettingsProps {
   /** Called after a change that the dashboard's numbers depend on. */
   onChanged?: () => void;
+  /** Back to the timer. */
+  onBack?: () => void;
+  /** Name of the signed-in (local) profile. */
+  profileName?: string;
+  /** Called after the profile is cleared. */
+  onSignOut?: () => void;
 }
 
-export default function Settings({ onChanged }: SettingsProps) {
+export default function Settings({ onChanged, onBack, profileName, onSignOut }: SettingsProps) {
   const [settings, setSettings] = useState<SettingsValue | null>(null);
 
   useEffect(() => {
@@ -84,6 +87,11 @@ export default function Settings({ onChanged }: SettingsProps) {
     );
   }, [onChanged]);
 
+  const handleSignOut = useCallback(async () => {
+    await clearProfile();
+    onSignOut?.();
+  }, [onSignOut]);
+
   if (!settings) return null;
 
   return (
@@ -94,11 +102,22 @@ export default function Settings({ onChanged }: SettingsProps) {
     >
       <PixelBox shadow={6} boxStyle={styles.frame}>
       <View style={styles.body}>
-        <View>
-          <Text style={styles.title} accessibilityRole="header">
-            CONFIG
-          </Text>
-          <Text style={styles.subtitle}>HOW YOUR STUDY TIME IS COUNTED</Text>
+        <View style={styles.headerRow}>
+          <View style={styles.headerText}>
+            <Text style={styles.title} accessibilityRole="header">
+              CONFIG
+            </Text>
+            <Text style={styles.subtitle}>WEEK BOUNDARY AND STORED HISTORY</Text>
+          </View>
+          <PixelButton
+            shadow={0}
+            color={T.secondary}
+            onPress={onBack}
+            accessibilityLabel="Back to timer"
+            boxStyle={styles.backBox}
+          >
+            <ArrowLeft size={20} color={T.ink} />
+          </PixelButton>
         </View>
 
         <PixelBox shadow={0} boxStyle={styles.card}>
@@ -113,17 +132,25 @@ export default function Settings({ onChanged }: SettingsProps) {
           />
         </PixelBox>
 
-        <PixelBox shadow={0} boxStyle={styles.card}>
-          <Text style={styles.cardTitle} accessibilityRole="header">
-            MINIMUM SESSION
-          </Text>
-          <Text style={styles.cardDesc}>Sessions shorter than this are discarded, not saved.</Text>
-          <Segmented
-            choices={MIN_SESSION_CHOICES}
-            value={settings.minSessionMs}
-            onChange={(minSessionMs) => update({ minSessionMs })}
-          />
-        </PixelBox>
+        {profileName ? (
+          <PixelBox shadow={0} boxStyle={styles.card}>
+            <Text style={styles.cardTitle} accessibilityRole="header">
+              ACCOUNT
+            </Text>
+            <Text style={styles.cardDesc}>
+              SIGNED IN AS {profileName.toUpperCase()}. THIS DEVICE ONLY — NOTHING IS SYNCED YET.
+            </Text>
+            <PixelButton
+              shadow={2}
+              color={T.bg}
+              onPress={handleSignOut}
+              style={styles.clearWrap}
+              boxStyle={styles.clearBox}
+            >
+              <Text style={styles.clearLabel}>SIGN OUT</Text>
+            </PixelButton>
+          </PixelBox>
+        ) : null}
 
         <PixelBox shadow={0} boxStyle={styles.card}>
           <Text style={styles.cardTitle} accessibilityRole="header">
@@ -149,6 +176,9 @@ export default function Settings({ onChanged }: SettingsProps) {
 const styles = StyleSheet.create({
   screen: { flex: 1, width: '100%', backgroundColor: T.bg, paddingHorizontal: 16, paddingTop: 4 },
   frame: { padding: 14 },
+  headerRow: { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12 },
+  headerText: { flex: 1 },
+  backBox: { width: 40, height: 40, alignItems: 'center', justifyContent: 'center' },
   body: { gap: 18 },
   title: { fontFamily: T.fontPixel, fontSize: 13, color: T.ink },
   subtitle: { fontFamily: T.fontPixel, fontSize: 8, color: T.muted, marginTop: 10 },

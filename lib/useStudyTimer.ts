@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { saveSession, StudySession } from './sessions';
-import { loadSettings } from './settings';
 
 export type TimerState = 'ready' | 'running' | 'paused';
 
@@ -81,16 +80,12 @@ export function useStudyTimer(): UseStudyTimerResult {
         sessionStartedAt.current ?? new Date(now - totalMs).toISOString();
       const endedIso = new Date(now).toISOString();
 
-      const { minSessionMs } = await loadSettings();
-      const session = await saveSession(
-        {
-          startedAt: startedIso,
-          endedAt: endedIso,
-          durationMs: totalMs,
-          subject,
-        },
-        minSessionMs
-      );
+      const session = await saveSession({
+        startedAt: startedIso,
+        endedAt: endedIso,
+        durationMs: totalMs,
+        subject,
+      });
 
       accumulatedMs.current = 0;
       startedAt.current = null;
