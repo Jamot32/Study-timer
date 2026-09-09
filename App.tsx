@@ -6,12 +6,13 @@ import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 import Dashboard from './components/Dashboard';
 import StudyTimer from './components/StudyTimer';
 import Settings from './components/Settings';
+import ProfileEdit from './components/ProfileEdit';
 import Login from './components/Login';
 import Loading from './components/Loading';
 import { loadProfile, type Profile } from './lib/auth';
 import { T } from './components/pixel';
 
-type Screen = 'timer' | 'dashboard' | 'settings';
+type Screen = 'timer' | 'dashboard' | 'settings' | 'profile';
 
 export default function App() {
   const [fontsLoaded, fontError] = useFonts({ PressStart2P_400Regular });
@@ -48,7 +49,8 @@ export default function App() {
               onFinished={() => setRefreshKey((k) => k + 1)}
               onOpenStats={() => setScreen('dashboard')}
               onOpenSettings={() => setScreen('settings')}
-              profileName={profile.name}
+              onOpenProfile={() => setScreen('profile')}
+              profile={profile}
             />
           </ScrollView>
         )}
@@ -64,11 +66,21 @@ export default function App() {
             <Settings
               onChanged={() => setRefreshKey((k) => k + 1)}
               onBack={backToTimer}
-              profileName={profile.name}
+              profile={profile}
+              onEditProfile={() => setScreen('profile')}
               onSignOut={() => {
                 setProfile(null);
                 setScreen('timer');
               }}
+            />
+          </View>
+        )}
+        {profile && screen === 'profile' && (
+          <View style={styles.page}>
+            <ProfileEdit
+              profile={profile}
+              onProfileChanged={setProfile}
+              onBack={() => setScreen('settings')}
             />
           </View>
         )}

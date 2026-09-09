@@ -13,6 +13,9 @@ export const T = {
   fontPixel: 'PressStart2P_400Regular',
 };
 
+/** Pixel border width. Absolute children sit inside it — see Avatar's sticker math. */
+export const BORDER = 4;
+
 export const ABS_FILL = {
   position: 'absolute',
   left: 0,
@@ -114,7 +117,7 @@ export function PixelProgress({ value }: { value: number }) {
 
 const styles = StyleSheet.create({
   pixelBorder: {
-    borderWidth: 4,
+    borderWidth: BORDER,
     borderColor: T.ink,
     backgroundColor: T.bg,
   },
