@@ -3,7 +3,8 @@ import React, { useCallback, useEffect, useState } from 'react';
 import { ScrollView, StyleSheet, Text, View } from 'react-native';
 import { PixelBox, PixelButton, T } from '@/components/pixel';
 import { confirmDestructive } from '@/lib/confirm';
-import { clearProfile } from '@/lib/auth';
+import { clearProfile, type Profile } from '@/lib/auth';
+import { Avatar } from '@/components/Avatar';
 import { clearSessions } from '@/lib/sessions';
 import { loadSettings, saveSettings, type Settings as SettingsValue } from '@/lib/settings';
 
@@ -53,13 +54,21 @@ export interface SettingsProps {
   onChanged?: () => void;
   /** Back to the timer. */
   onBack?: () => void;
-  /** Name of the signed-in (local) profile. */
-  profileName?: string;
+  /** The signed-in (local) profile. */
+  profile?: Profile;
+  /** Opens the profile editor. */
+  onEditProfile?: () => void;
   /** Called after the profile is cleared. */
   onSignOut?: () => void;
 }
 
-export default function Settings({ onChanged, onBack, profileName, onSignOut }: SettingsProps) {
+export default function Settings({
+  onChanged,
+  onBack,
+  profile,
+  onEditProfile,
+  onSignOut,
+}: SettingsProps) {
   const [settings, setSettings] = useState<SettingsValue | null>(null);
 
   useEffect(() => {
@@ -132,14 +141,37 @@ export default function Settings({ onChanged, onBack, profileName, onSignOut }: 
           />
         </PixelBox>
 
-        {profileName ? (
+        {profile ? (
           <PixelBox shadow={0} boxStyle={styles.card}>
             <Text style={styles.cardTitle} accessibilityRole="header">
-              ACCOUNT
+              PROFILE
             </Text>
             <Text style={styles.cardDesc}>
-              SIGNED IN AS {profileName.toUpperCase()}. THIS DEVICE ONLY — NOTHING IS SYNCED YET.
+              SIGNED IN AS {profile.name.toUpperCase()}. THIS DEVICE ONLY — NOTHING IS SYNCED YET.
             </Text>
+
+            <View style={styles.previewRow}>
+              <Avatar profile={profile} size={56} />
+              <View style={styles.previewText}>
+                <Text style={styles.previewTitle} numberOfLines={1}>
+                  {(profile.title || 'USERNAME').toUpperCase()}
+                </Text>
+                <Text style={styles.previewName} numberOfLines={1}>
+                  {profile.name.toUpperCase()}
+                </Text>
+              </View>
+            </View>
+
+            <PixelButton
+              shadow={2}
+              color={T.primary}
+              onPress={onEditProfile}
+              style={styles.clearWrap}
+              boxStyle={styles.clearBox}
+            >
+              <Text style={[styles.clearLabel, { color: T.primaryFg }]}>EDIT PROFILE</Text>
+            </PixelButton>
+
             <PixelButton
               shadow={2}
               color={T.bg}
@@ -192,6 +224,11 @@ const styles = StyleSheet.create({
   segment: { flex: 1 },
   segmentBox: { height: 38, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 2 },
   segmentLabel: { fontFamily: T.fontPixel, fontSize: 8 },
+
+  previewRow: { flexDirection: 'row', alignItems: 'center', gap: 12, marginTop: 14 },
+  previewText: { flex: 1 },
+  previewTitle: { fontFamily: T.fontPixel, fontSize: 8, color: T.muted },
+  previewName: { fontFamily: T.fontPixel, fontSize: 11, color: T.ink, marginTop: 8 },
 
   clearWrap: { marginTop: 14 },
   clearBox: { height: 40, alignItems: 'center', justifyContent: 'center' },

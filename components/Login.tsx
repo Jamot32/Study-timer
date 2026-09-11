@@ -9,7 +9,7 @@ export default function Login({ onLoggedIn }: { onLoggedIn: (profile: Profile) =
 
   const submit = async () => {
     if (!trimmed) return;
-    onLoggedIn(await saveProfile(trimmed));
+    onLoggedIn(await saveProfile({ name: trimmed }));
   };
 
   return (
@@ -36,7 +36,7 @@ export default function Login({ onLoggedIn }: { onLoggedIn: (profile: Profile) =
         <PixelButton
           shadow={2}
           color={T.bg}
-          onPress={async () => onLoggedIn(await saveProfile('Guest'))}
+          onPress={async () => onLoggedIn(await saveProfile({ name: 'Guest' }))}
           style={styles.cta}
           boxStyle={styles.guestBox}
         >

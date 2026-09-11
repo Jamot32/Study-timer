@@ -5,6 +5,8 @@ import { BarChart3, Check, Moon, Pause, Play, RotateCcw, Settings2, Sun } from '
 import { confirmDestructive } from '../lib/confirm'
 import { useStudyTimer } from '../lib/useStudyTimer'
 import { awayOutcome } from '../lib/away'
+import { type Profile } from '../lib/auth'
+import { Avatar } from './Avatar'
 
 // ============================================================
 // PIXEL STUDY TIMER — React Native (Expo)
@@ -218,13 +220,15 @@ export function StudyTimer({
   onFinished,
   onOpenStats,
   onOpenSettings,
-  profileName,
+  onOpenProfile,
+  profile,
 }: {
   onFinished?: () => void
   onOpenStats?: () => void
   onOpenSettings?: () => void
-  /** Name of the logged-in profile; drives the header avatar and name. */
-  profileName?: string
+  onOpenProfile?: () => void
+  /** Logged-in profile; drives the header avatar, outer line, title and name. */
+  profile?: Profile
 }) {
   const [mode, setMode] = useState<'FOCUS' | 'SHORT BREAK'>('FOCUS')
   const [breakBank, setBreakBank] = useState(0)
@@ -378,8 +382,8 @@ export function StudyTimer({
     setMode('SHORT BREAK')
   }
 
-  const name = (profileName?.trim() || 'GUEST').toUpperCase()
-  const initials = name.slice(0, 2)
+  const name = (profile?.name.trim() || 'GUEST').toUpperCase()
+  const title = (profile?.title || 'USERNAME').toUpperCase()
 
   const time = useMemo(() => formatTime(elapsed), [elapsed])
   const SkyIcon = isDay ? Sun : Moon
@@ -392,11 +396,11 @@ export function StudyTimer({
         {/* 헤더 */}
         <View style={styles.header}>
           <View style={styles.headerLeft}>
-            <PixelBox shadow={3} boxStyle={styles.avatar}>
-              <Text style={styles.avatarText}>{initials}</Text>
-            </PixelBox>
+            <Pressable onPress={onOpenProfile} accessibilityRole="button" accessibilityLabel="Edit profile">
+              <Avatar profile={profile} size={40} />
+            </Pressable>
             <View>
-              <Text style={styles.label}>USERNAME</Text>
+              <Text style={styles.label} numberOfLines={1}>{title}</Text>
               <View style={styles.nameRow}>
                 <Text style={styles.name} numberOfLines={1}>
                   {name}
@@ -561,14 +565,6 @@ const styles = StyleSheet.create({
   },
   headerLeft: { flexDirection: 'row', alignItems: 'center', gap: 12 },
   headerActions: { flexDirection: 'row', gap: 8 },
-  avatar: {
-    width: 40,
-    height: 40,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: T.primary,
-  },
-  avatarText: { fontFamily: T.fontPixel, fontSize: 10, color: T.primaryFg },
   label: { fontFamily: T.fontPixel, fontSize: 9, color: T.muted },
   nameRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 4 },
   name: { fontFamily: T.fontPixel, fontSize: 13, color: T.ink },
