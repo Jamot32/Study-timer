@@ -6,6 +6,8 @@ import { confirmDestructive } from '../lib/confirm'
 import { useStudyTimer } from '../lib/useStudyTimer'
 import { awayOutcome } from '../lib/away'
 import { type Profile } from '../lib/auth'
+import { loadSessions } from '../lib/sessions'
+import { studyStats } from '../lib/progress'
 import { Avatar } from './Avatar'
 
 // ============================================================
@@ -222,6 +224,7 @@ export function StudyTimer({
   onOpenSettings,
   onOpenProfile,
   profile,
+  refreshKey = 0,
 }: {
   onFinished?: () => void
   onOpenStats?: () => void
@@ -229,6 +232,8 @@ export function StudyTimer({
   onOpenProfile?: () => void
   /** Logged-in profile; drives the header avatar, outer line, title and name. */
   profile?: Profile
+  /** Bumped by App after a session is banked, so the header level stays current. */
+  refreshKey?: number
 }) {
   const [mode, setMode] = useState<'FOCUS' | 'SHORT BREAK'>('FOCUS')
   const [breakBank, setBreakBank] = useState(0)
@@ -236,6 +241,8 @@ export function StudyTimer({
   const [weeklyMax, setWeeklyMax] = useState(0)
   const [breakElapsed, setBreakElapsed] = useState(0)
   const [isFinishing, setIsFinishing] = useState(false)
+  // Same engine as the profile screen, so the two headers can never disagree.
+  const [level, setLevel] = useState(1)
 
   // FOCUS runs on the shared timer so finished sessions actually reach the
   // dashboard; SHORT BREAK runs on its own counter so break time is never
@@ -256,6 +263,16 @@ export function StudyTimer({
     if (onBreak) return
     setWeeklyMax((maximum) => Math.max(maximum, focusElapsed))
   }, [focusElapsed, onBreak])
+
+  useEffect(() => {
+    let cancelled = false
+    loadSessions().then((sessions) => {
+      if (!cancelled) setLevel(studyStats(sessions).level)
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [refreshKey])
 
   // one 5-minute credit per full hour of focus. Counting crossings rather than
   // `elapsed % 3600 === 0` because the shared timer ticks every 100ms and can
@@ -405,7 +422,7 @@ export function StudyTimer({
                 <Text style={styles.name} numberOfLines={1}>
                   {name}
                 </Text>
-                <Text style={styles.level}>LVL 04</Text>
+                <Text style={styles.level}>LVL {String(level).padStart(2, '0')}</Text>
               </View>
             </View>
           </View>

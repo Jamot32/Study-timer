@@ -51,6 +51,7 @@ export default function App() {
               onOpenSettings={() => setScreen('settings')}
               onOpenProfile={() => setScreen('profile')}
               profile={profile}
+              refreshKey={refreshKey}
             />
           </ScrollView>
         )}

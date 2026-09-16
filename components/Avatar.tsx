@@ -9,7 +9,11 @@ const STICKER_RATIO = 0.28;
 export type StickerDrag = {
   onMove: (index: number, x: number, y: number) => void;
   onStart?: () => void;
-  onEnd?: () => void;
+  /**
+   * Fired for taps too. `moved` separates a real drag (keep it) from a tap
+   * (usually a delete), so the caller can tell one undo step from the other.
+   */
+  onEnd?: (index: number, moved: boolean) => void;
   /** A tap that never moved — used to remove the sticker. */
   onTap?: (index: number) => void;
 };
@@ -78,10 +82,12 @@ function DraggableSticker({
         );
       },
       onPanResponderRelease: () => {
-        if (!start.current.moved) live.current.drag.onTap?.(live.current.index);
-        live.current.drag.onEnd?.();
+        const { index } = live.current;
+        if (!start.current.moved) live.current.drag.onTap?.(index);
+        live.current.drag.onEnd?.(index, start.current.moved);
       },
-      onPanResponderTerminate: () => live.current.drag.onEnd?.(),
+      onPanResponderTerminate: () =>
+        live.current.drag.onEnd?.(live.current.index, start.current.moved),
     })
   ).current;
 

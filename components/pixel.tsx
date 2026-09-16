@@ -54,6 +54,8 @@ type PixelButtonProps = {
   style?: StyleProp<ViewStyle>;
   boxStyle?: StyleProp<ViewStyle>;
   accessibilityLabel?: string;
+  /** Explains a consequence the label cannot, e.g. what a locked button needs. */
+  accessibilityHint?: string;
   accessibilityState?: { selected?: boolean; disabled?: boolean };
   children?: React.ReactNode;
 };
@@ -66,6 +68,7 @@ export function PixelButton({
   style,
   boxStyle,
   accessibilityLabel,
+  accessibilityHint,
   accessibilityState,
   children,
 }: PixelButtonProps) {
@@ -80,6 +83,7 @@ export function PixelButton({
       onPressOut={() => setPressed(false)}
       accessibilityRole="button"
       accessibilityLabel={accessibilityLabel}
+      accessibilityHint={accessibilityHint}
       accessibilityState={accessibilityState}
       style={[{ paddingRight: shadow, paddingBottom: shadow, opacity: disabled ? 0.4 : 1 }, style]}
     >
