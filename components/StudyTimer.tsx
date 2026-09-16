@@ -1,10 +1,12 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { Alert, Pressable, StyleSheet, Text, View, type StyleProp, type ViewStyle } from 'react-native'
+import { Alert, AppState, Pressable, StyleSheet, Text, View, type StyleProp, type ViewStyle } from 'react-native'
 import { LinearGradient } from 'expo-linear-gradient'
-import { Check, Moon, Pause, Play, RotateCcw, Settings2, Sun } from 'lucide-react-native'
+import { BarChart3, Check, Moon, Pause, Play, RotateCcw, Settings2, Sun } from 'lucide-react-native'
 import { confirmDestructive } from '../lib/confirm'
-import { loadSettings, minSessionLabel } from '../lib/settings'
 import { useStudyTimer } from '../lib/useStudyTimer'
+import { awayOutcome } from '../lib/away'
+import { type Profile } from '../lib/auth'
+import { Avatar } from './Avatar'
 
 // ============================================================
 // PIXEL STUDY TIMER — React Native (Expo)
@@ -214,7 +216,20 @@ function PixelProgress({ value }: { value: number }) {
 }
 
 // ---------- 메인 컴포넌트 ----------
-export function StudyTimer({ onFinished }: { onFinished?: () => void }) {
+export function StudyTimer({
+  onFinished,
+  onOpenStats,
+  onOpenSettings,
+  onOpenProfile,
+  profile,
+}: {
+  onFinished?: () => void
+  onOpenStats?: () => void
+  onOpenSettings?: () => void
+  onOpenProfile?: () => void
+  /** Logged-in profile; drives the header avatar, outer line, title and name. */
+  profile?: Profile
+}) {
   const [mode, setMode] = useState<'FOCUS' | 'SHORT BREAK'>('FOCUS')
   const [breakBank, setBreakBank] = useState(0)
   const [streakBroken, setStreakBroken] = useState(false)
@@ -285,15 +300,7 @@ export function StudyTimer({ onFinished }: { onFinished?: () => void }) {
     try {
       const session = await finish()
       earnedHours.current = 0
-      if (session === null) {
-        const { minSessionMs } = await loadSettings()
-        Alert.alert(
-          'Session Discarded',
-          `Sessions shorter than ${minSessionLabel(minSessionMs)} are not saved to history.`
-        )
-      } else {
-        onFinished?.()
-      }
+      if (session !== null) onFinished?.()
     } catch (error) {
       console.error('Failed to finish session:', error)
       Alert.alert('Error', 'Failed to save session.')
@@ -301,6 +308,47 @@ export function StudyTimer({ onFinished }: { onFinished?: () => void }) {
       setIsFinishing(false)
     }
   }, [elapsedMs, endBreak, finish, isFinishing, onBreak, onFinished])
+
+  // Leaving the app stops the clock; coming back resumes it. Stay away longer
+  // than the limit without being on a paid break and the session is banked.
+  // The listener is registered once, so it reads live values through a ref.
+  const live = useRef({ onBreak, isRunning, hasTime: elapsedMs > 0, handleFinish, resetFocus, toggle })
+  live.current = { onBreak, isRunning, hasTime: elapsedMs > 0, handleFinish, resetFocus, toggle }
+
+  useEffect(() => {
+    const leftAt = { at: null as number | null, wasRunning: false }
+    const subscription = AppState.addEventListener('change', (next) => {
+      const { onBreak, isRunning, hasTime, handleFinish, resetFocus, toggle } = live.current
+
+      if (next === 'active') {
+        if (leftAt.at === null) return
+        const awayMs = Date.now() - leftAt.at
+        const wasRunning = leftAt.wasRunning
+        leftAt.at = null
+        switch (awayOutcome(awayMs, { onBreak, hasTime, wasRunning })) {
+          case 'finish':
+            handleFinish()
+            break
+          case 'reset':
+            resetFocus()
+            break
+          case 'resume':
+            toggle()
+            break
+        }
+        return
+      }
+
+      // 'inactive' is a transient iOS state (notification shade, app switcher);
+      // only a real background counts as leaving.
+      if (next === 'background' && leftAt.at === null) {
+        leftAt.at = Date.now()
+        leftAt.wasRunning = isRunning && !onBreak
+        if (leftAt.wasRunning) toggle()
+      }
+    })
+    return () => subscription.remove()
+  }, [])
 
   const reset = () => {
     if (onBreak) {
@@ -334,6 +382,9 @@ export function StudyTimer({ onFinished }: { onFinished?: () => void }) {
     setMode('SHORT BREAK')
   }
 
+  const name = (profile?.name.trim() || 'GUEST').toUpperCase()
+  const title = (profile?.title || 'USERNAME').toUpperCase()
+
   const time = useMemo(() => formatTime(elapsed), [elapsed])
   const SkyIcon = isDay ? Sun : Moon
 
@@ -345,25 +396,39 @@ export function StudyTimer({ onFinished }: { onFinished?: () => void }) {
         {/* 헤더 */}
         <View style={styles.header}>
           <View style={styles.headerLeft}>
-            <PixelBox shadow={3} boxStyle={styles.avatar}>
-              <Text style={styles.avatarText}>YU</Text>
-            </PixelBox>
+            <Pressable onPress={onOpenProfile} accessibilityRole="button" accessibilityLabel="Edit profile">
+              <Avatar profile={profile} size={40} />
+            </Pressable>
             <View>
-              <Text style={styles.label}>USERNAME</Text>
+              <Text style={styles.label} numberOfLines={1}>{title}</Text>
               <View style={styles.nameRow}>
-                <Text style={styles.name}>YUNA</Text>
+                <Text style={styles.name} numberOfLines={1}>
+                  {name}
+                </Text>
                 <Text style={styles.level}>LVL 04</Text>
               </View>
             </View>
           </View>
-          <PixelButton
-            shadow={0}
-            color={T.secondary}
-            accessibilityLabel="Open timer settings"
-            boxStyle={styles.iconButtonSmall}
-          >
-            <Settings2 size={20} color={T.ink} />
-          </PixelButton>
+          <View style={styles.headerActions}>
+            <PixelButton
+              shadow={0}
+              color={T.secondary}
+              onPress={onOpenStats}
+              accessibilityLabel="Open study stats"
+              boxStyle={styles.iconButtonSmall}
+            >
+              <BarChart3 size={20} color={T.ink} />
+            </PixelButton>
+            <PixelButton
+              shadow={0}
+              color={T.secondary}
+              onPress={onOpenSettings}
+              accessibilityLabel="Open settings"
+              boxStyle={styles.iconButtonSmall}
+            >
+              <Settings2 size={20} color={T.ink} />
+            </PixelButton>
+          </View>
         </View>
 
         {/* 상태 줄 */}
@@ -499,14 +564,7 @@ const styles = StyleSheet.create({
     paddingVertical: 14,
   },
   headerLeft: { flexDirection: 'row', alignItems: 'center', gap: 12 },
-  avatar: {
-    width: 40,
-    height: 40,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: T.primary,
-  },
-  avatarText: { fontFamily: T.fontPixel, fontSize: 10, color: T.primaryFg },
+  headerActions: { flexDirection: 'row', gap: 8 },
   label: { fontFamily: T.fontPixel, fontSize: 9, color: T.muted },
   nameRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 4 },
   name: { fontFamily: T.fontPixel, fontSize: 13, color: T.ink },

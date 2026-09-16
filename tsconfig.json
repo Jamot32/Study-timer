@@ -2,6 +2,8 @@
   "extends": "expo/tsconfig.base",
   "compilerOptions": {
     "strict": true,
+    // self-check.mjs runs the lib under node --experimental-strip-types, which needs explicit extensions
+    "allowImportingTsExtensions": true,
     "paths": {
       "@/*": [
         "./*"
