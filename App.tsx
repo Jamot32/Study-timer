@@ -1,6 +1,6 @@
 import { useFonts, PressStart2P_400Regular } from '@expo-google-fonts/press-start-2p';
 import { StatusBar } from 'expo-status-bar';
-import React, { useState } from 'react';
+import React, { useCallback, useState } from 'react';
 import { ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 import Dashboard from './components/Dashboard';
@@ -23,6 +23,9 @@ export default function App() {
   const [fontsLoaded, fontError] = useFonts({ PressStart2P_400Regular });
   const [activeTab, setActiveTab] = useState<Tab>('timer');
   const [refreshKey, setRefreshKey] = useState(0);
+  // ROLL 이 책을 펼치면 탭 바까지 치운다. 책만 보이게.
+  const [rollFocused, setRollFocused] = useState(false);
+  const onRollFocus = useCallback((f: boolean) => setRollFocused(f), []);
 
   // after every hook — an early return above them breaks hook order on load.
   // fontError falls through to the system font rather than hanging on a blank screen.
@@ -36,7 +39,7 @@ export default function App() {
           onValueChange={(val) => setActiveTab(val as Tab)}
           className="w-full flex-1 flex flex-col"
         >
-          <View style={styles.tabBar}>
+          {!(rollFocused && activeTab === 'roll') && <View style={styles.tabBar}>
             {TABS.map((tab) => {
               const selected = activeTab === tab.value;
               return (
@@ -55,7 +58,7 @@ export default function App() {
                 </PixelButton>
               );
             })}
-          </View>
+          </View>}
 
           <TabsContent value="timer" className="flex-1">
             {/* the timer frame is taller than the viewport once the tab bar is above it */}
@@ -68,7 +71,7 @@ export default function App() {
           </TabsContent>
 
           <TabsContent value="roll" className="flex-1 w-full max-w-lg mx-auto">
-            <PageRoll />
+            <PageRoll onFocusChange={onRollFocus} />
           </TabsContent>
 
           <TabsContent value="dashboard" className="flex-1 w-full max-w-lg mx-auto">
