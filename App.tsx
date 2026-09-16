@@ -4,15 +4,17 @@ import React, { useState } from 'react';
 import { ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 import Dashboard from './components/Dashboard';
+import PageRoll from './components/PageRoll';
 import StudyTimer from './components/StudyTimer';
 import Settings from './components/Settings';
 import { Tabs, TabsContent } from './components/ui/tabs';
 import { PixelButton, T } from './components/pixel';
 
-type Tab = 'timer' | 'dashboard' | 'settings';
+type Tab = 'timer' | 'roll' | 'dashboard' | 'settings';
 
 const TABS: { value: Tab; label: string }[] = [
   { value: 'timer', label: 'TIMER' },
+  { value: 'roll', label: 'ROLL' },
   { value: 'dashboard', label: 'STATS' },
   { value: 'settings', label: 'CONFIG' },
 ];
@@ -65,6 +67,10 @@ export default function App() {
             </ScrollView>
           </TabsContent>
 
+          <TabsContent value="roll" className="flex-1 w-full max-w-lg mx-auto">
+            <PageRoll />
+          </TabsContent>
+
           <TabsContent value="dashboard" className="flex-1 w-full max-w-lg mx-auto">
             <Dashboard isActive={activeTab === 'dashboard'} refreshKey={refreshKey} />
           </TabsContent>
@@ -97,5 +103,5 @@ const styles = StyleSheet.create({
   timerScroll: { flexGrow: 1, justifyContent: 'center', paddingBottom: 16 },
   tabItem: { flex: 1 },
   tabBox: { height: 40, alignItems: 'center', justifyContent: 'center' },
-  tabLabel: { fontFamily: T.fontPixel, fontSize: 9 },
+  tabLabel: { fontFamily: T.fontPixel, fontSize: 8 },
 });
