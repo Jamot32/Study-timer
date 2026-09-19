@@ -3,6 +3,7 @@ import { StyleSheet, Text, View } from 'react-native'
 import Svg, { G, Line, Polygon, Text as SvgText } from 'react-native-svg'
 import { PixelButton, T } from '@/components/pixel'
 import { QUOTES } from '@/components/quotes'
+import { loadRolls, spendRoll, type RollBank } from '@/lib/rolls'
 
 // ============================================================
 // PAGE ROLL — 무작위 페이지 뽑기
@@ -376,7 +377,13 @@ function rewardLines(seed: number): TextLine[] {
 }
 
 // onFocusChange: ROLL 로 책에 집중하는 동안 true. 바깥(탭 바)도 같이 치우라고 알린다.
-export default function PageRoll({ onFocusChange }: { onFocusChange?: (focused: boolean) => void } = {}) {
+// refreshKey: 공부를 끝낼 때마다 바뀐다. 그때 모아 둔 ROLL 수를 다시 읽는다.
+//
+// 책은 공짜로 열리지 않는다. 한 판 끝낸 사람만 한 번 뽑는다.
+export default function PageRoll({
+  onFocusChange,
+  refreshKey = 0,
+}: { onFocusChange?: (focused: boolean) => void; refreshKey?: number } = {}) {
   const [scene, setScene] = useState<Scene>(SHUT)
   // idle: 제목과 ROLL 이 보이는 첫 화면. 책장은 보이지만 만질 수 없다.
   // shelf: ROLL 을 눌러 책장만 남은 상태. 여기서만 책을 고를 수 있다.
@@ -393,6 +400,14 @@ export default function PageRoll({ onFocusChange }: { onFocusChange?: (focused: 
   const [pages, setPages] = useState<number[]>(() => pagesFor(160, TOTAL))
   const [pick, setPick] = useState<{ lo: number; hi: number; a: number; b: number } | null>(null)
   const [hover, setHover] = useState<number | null>(null)
+
+  // 모아 둔 ROLL. 공부를 끝낼 때 쌓이고, 한 번 뽑을 때마다 하나 준다.
+  const [bank, setBank] = useState<RollBank | null>(null)
+  useEffect(() => {
+    let alive = true
+    loadRolls().then((next) => { if (alive) setBank(next) })
+    return () => { alive = false }
+  }, [refreshKey])
 
   const sceneRef = useRef(scene)
   sceneRef.current = scene
@@ -472,9 +487,15 @@ export default function PageRoll({ onFocusChange }: { onFocusChange?: (focused: 
     })
   }, [busy, mode, animate, runPull])
 
-  // ROLL = 책장만 남기고 책을 고르게 한다.
-  const roll = useCallback(() => {
+  // ROLL = 모아 둔 하나를 치르고 책장만 남긴다. 없으면 열리지 않는다.
+  const roll = useCallback(async () => {
     if (busy || mode !== 'idle') return
+    const next = await spendRoll()
+    if (next === null) {
+      setBank((current) => current ?? { tickets: 0, spent: 0 })
+      return
+    }
+    setBank(next)
     setMode('shelf')
   }, [busy, mode])
 
@@ -815,6 +836,8 @@ export default function PageRoll({ onFocusChange }: { onFocusChange?: (focused: 
 
   // ROLL 뒤에는 책장(그리고 책)만 남긴다. 제목·쪽수·ROLL 은 치운다.
   const focused = mode !== 'idle'
+  const tickets = bank?.tickets ?? 0
+  const canRoll = tickets > 0
   useEffect(() => { onFocusChange?.(focused) }, [focused, onFocusChange])
 
   return (
@@ -831,7 +854,16 @@ export default function PageRoll({ onFocusChange }: { onFocusChange?: (focused: 
         <>
           <View style={styles.head}>
             <Text style={styles.title} accessibilityRole="header">PAGE ROLL</Text>
-            <Text style={styles.sub}>ROLL, THEN PICK A BOOK OFF THE SHELF.{'\n'}IT OPENS SOMEWHERE. TAP A LEAF, THEN SELECT.</Text>
+            <Text style={styles.sub}>
+              {tickets > 0
+                ? "ROLL, THEN PICK A BOOK OFF THE SHELF.\nIT OPENS SOMEWHERE. TAP A LEAF, THEN SELECT."
+                : "THE SHELF IS LOCKED.\nFINISH A STUDY SESSION TO EARN A ROLL."}
+            </Text>
+          </View>
+
+          <View style={styles.metaRow}>
+            <Text style={styles.metaLabel}>ROLLS EARNED</Text>
+            <Text style={styles.metaValue}>{bank === null ? '--' : tickets}</Text>
           </View>
 
           <View style={styles.metaRow}>
@@ -840,8 +872,17 @@ export default function PageRoll({ onFocusChange }: { onFocusChange?: (focused: 
           </View>
 
           <View style={styles.keys}>
-            <PixelButton onPress={roll} disabled={busy} style={styles.grow2} boxStyle={styles.keyBox}>
-              <Text style={styles.keyLabel}>ROLL</Text>
+            <PixelButton
+              onPress={roll}
+              disabled={busy || !canRoll}
+              color={canRoll ? T.primary : T.secondary}
+              style={styles.grow2}
+              boxStyle={styles.keyBox}
+              accessibilityLabel={canRoll ? 'ROLL' : 'Locked. Finish a study session to earn a roll.'}
+            >
+              <Text style={[styles.keyLabel, !canRoll && styles.keyLabelLocked]}>
+                {canRoll ? 'ROLL' : 'LOCKED'}
+              </Text>
             </PixelButton>
           </View>
         </>
@@ -892,6 +933,7 @@ const styles = StyleSheet.create({
   keyBox: { height: 44, alignItems: 'center', justifyContent: 'center' },
   keySpacer: { height: 48 },
   keyLabel: { fontFamily: T.fontPixel, fontSize: 9, color: T.primaryFg },
+  keyLabelLocked: { color: T.muted },
 
   stage: { flex: 1, marginTop: 8, marginBottom: 12 },
   stageFull: { marginTop: -8, marginBottom: -12, marginHorizontal: -16 },

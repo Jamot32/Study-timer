@@ -71,7 +71,7 @@ export default function App() {
           </TabsContent>
 
           <TabsContent value="roll" className="flex-1 w-full max-w-lg mx-auto">
-            <PageRoll onFocusChange={onRollFocus} />
+            <PageRoll onFocusChange={onRollFocus} refreshKey={refreshKey} />
           </TabsContent>
 
           <TabsContent value="dashboard" className="flex-1 w-full max-w-lg mx-auto">

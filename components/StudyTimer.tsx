@@ -6,6 +6,7 @@ import { confirmDestructive } from '../lib/confirm'
 import { useStudyTimer } from '../lib/useStudyTimer'
 import { awayOutcome } from '../lib/away'
 import { type Profile } from '../lib/auth'
+import { earnRolls, todayFocusMs } from '../lib/rolls'
 import { Avatar } from './Avatar'
 
 // ============================================================
@@ -16,7 +17,8 @@ import { Avatar } from './Avatar'
 
 // ---------- 설정 ----------
 // 하늘이 한 사이클(낮→밤) 도는 데 걸리는 시간(초).
-// 지금은 테스트용으로 60초. 실사용 시 3600으로 되돌리세요.
+// 공부한 시간만 하늘을 움직인다. 그 시간은 하루 단위로 쌓여서, 오늘 이미
+// 세 시간을 했다면 앱을 다시 열어도 하늘은 세 바퀴째에서 이어진다.
 const CYCLE_SECONDS = 3600
 // 사이클을 어느 시점에서 시작할지 (0~1).
 // 0.22 = 아침~낮 시작 지점. 0이면 동트기 전부터 시작.
@@ -236,6 +238,9 @@ export function StudyTimer({
   const [weeklyMax, setWeeklyMax] = useState(0)
   const [breakElapsed, setBreakElapsed] = useState(0)
   const [isFinishing, setIsFinishing] = useState(false)
+  // Focus already saved today. The sky starts from here rather than from zero,
+  // so a long day reads as a long day the moment the app opens.
+  const [dayFocusSec, setDayFocusSec] = useState(0)
 
   // FOCUS runs on the shared timer so finished sessions actually reach the
   // dashboard; SHORT BREAK runs on its own counter so break time is never
@@ -245,6 +250,15 @@ export function StudyTimer({
   const onBreak = mode === 'SHORT BREAK'
   const elapsed = onBreak ? breakElapsed : focusElapsed
   const isRunning = onBreak ? true : state === 'running'
+
+  const syncDayFocus = useCallback(async () => {
+    const ms = await todayFocusMs()
+    setDayFocusSec(Math.floor(ms / 1000))
+  }, [])
+
+  useEffect(() => {
+    syncDayFocus()
+  }, [syncDayFocus])
 
   useEffect(() => {
     if (!onBreak) return
@@ -270,7 +284,10 @@ export function StudyTimer({
     earnedHours.current = hours
   }, [focusElapsed, onBreak])
 
-  const cycleProgress = (elapsed % CYCLE_SECONDS) / CYCLE_SECONDS
+  // A break is rest, not study: the sun holds still until focus resumes.
+  const dayFocus = dayFocusSec + focusElapsed
+  const cycleProgress = (dayFocus % CYCLE_SECONDS) / CYCLE_SECONDS
+  const laps = Math.floor(dayFocus / CYCLE_SECONDS)
   const skyColors = useMemo(() => skyAt(cycleProgress + SKY_START), [cycleProgress])
   const isDay = !isSkyDark(skyColors[1])
   const skyText = isDay ? T.ink : '#e8ecf7'
@@ -300,27 +317,38 @@ export function StudyTimer({
     try {
       const session = await finish()
       earnedHours.current = 0
-      if (session !== null) onFinished?.()
+      if (session !== null) {
+        // The book is the reward for sitting down: a finished session pays for
+        // at least one roll, and the sky keeps the time it just banked.
+        // Credited here up front so the sun does not snap back to dawn while
+        // the write lands; syncDayFocus below is still the authority.
+        setDayFocusSec((value) => value + Math.floor(session.durationMs / 1000))
+        await earnRolls(session.durationMs)
+        await syncDayFocus()
+        onFinished?.()
+      }
     } catch (error) {
       console.error('Failed to finish session:', error)
       Alert.alert('Error', 'Failed to save session.')
     } finally {
       setIsFinishing(false)
     }
-  }, [elapsedMs, endBreak, finish, isFinishing, onBreak, onFinished])
+  }, [elapsedMs, endBreak, finish, isFinishing, onBreak, onFinished, syncDayFocus])
 
   // Leaving the app stops the clock; coming back resumes it. Stay away longer
   // than the limit without being on a paid break and the session is banked.
   // The listener is registered once, so it reads live values through a ref.
-  const live = useRef({ onBreak, isRunning, hasTime: elapsedMs > 0, handleFinish, resetFocus, toggle })
-  live.current = { onBreak, isRunning, hasTime: elapsedMs > 0, handleFinish, resetFocus, toggle }
+  const live = useRef({ onBreak, isRunning, hasTime: elapsedMs > 0, handleFinish, resetFocus, toggle, syncDayFocus })
+  live.current = { onBreak, isRunning, hasTime: elapsedMs > 0, handleFinish, resetFocus, toggle, syncDayFocus }
 
   useEffect(() => {
     const leftAt = { at: null as number | null, wasRunning: false }
     const subscription = AppState.addEventListener('change', (next) => {
-      const { onBreak, isRunning, hasTime, handleFinish, resetFocus, toggle } = live.current
+      const { onBreak, isRunning, hasTime, handleFinish, resetFocus, toggle, syncDayFocus } = live.current
 
       if (next === 'active') {
+        // Coming back can cross midnight, which empties the day's total.
+        syncDayFocus()
         if (leftAt.at === null) return
         const awayMs = Date.now() - leftAt.at
         const wasRunning = leftAt.wasRunning
@@ -465,6 +493,7 @@ export function StudyTimer({
               <SkyIcon size={16} color={skyText} />
               <Text style={[styles.cycleText, { color: skyText }]}>
                 {isDay ? 'DAY CYCLE' : 'NIGHT CYCLE'}
+                {laps > 0 ? ` x${laps + 1}` : ''}
               </Text>
             </View>
             <Text style={[styles.time, { color: skyText }]} accessibilityLiveRegion="polite">

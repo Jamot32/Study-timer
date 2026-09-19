@@ -6,6 +6,7 @@ import { confirmDestructive } from '@/lib/confirm';
 import { clearProfile, type Profile } from '@/lib/auth';
 import { Avatar } from '@/components/Avatar';
 import { clearSessions } from '@/lib/sessions';
+import { clearRolls } from '@/lib/rolls';
 import { loadSettings, saveSettings, type Settings as SettingsValue } from '@/lib/settings';
 
 const WEEK_START_CHOICES = [
@@ -90,7 +91,8 @@ export default function Settings({
       'Every saved study session will be deleted. This cannot be undone.',
       'Delete All',
       async () => {
-        await clearSessions();
+        // the rolls were earned by that history, so they go with it
+        await Promise.all([clearSessions(), clearRolls()]);
         onChanged?.();
       }
     );
