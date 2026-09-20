@@ -1,6 +1,8 @@
 // 펼친 왼쪽 쪽에 찍히는 한 마디. 전부 지어낸 말이고, 말한 이도 지어낸 이름이다.
 // 픽셀 글꼴은 대문자만 또렷해서 전부 대문자로 둔다. 한 줄 14자로 접히니 70자 안팎이 알맞다.
-export const QUOTES: Array<[string, string]> = [
+export type Quote = [string, string];
+
+export const QUOTES: Quote[] = [
   ['THE PAGE YOU DREAD IS THE PAGE THAT PAYS.', 'A DOG-EARED ALMANAC'],
   ['NOBODY REMEMBERS THE MINUTE YOU STARTED. ONLY THAT YOU DID.', 'THE DESK LAMP'],
   ['A SMALL PENCIL MOVES MORE MOUNTAINS THAN A LOUD PLAN.', 'UNCLE PEBBLE'],
@@ -102,3 +104,13 @@ export const QUOTES: Array<[string, string]> = [
   ['THE SECRET IS THERE IS NO SECRET. THERE IS TUESDAY.', 'TUESDAY'],
   ['END THE DAY WITH ONE THING YOU DID NOT KNOW THIS MORNING.', 'THE PILLOW'],
 ]
+
+// 아무나 못 보는 쪽. 오래 앉아 본 사람에게만 열린다.
+// 차례가 lib/canon 의 RARE_UNLOCKS 와 짝이다. 순서를 바꾸면 잠금도 바뀐다.
+export const RARE_QUOTES: Quote[] = [
+  ['SO THAT IS WHAT THE FIRST ONE FEELS LIKE. THERE ARE MORE.', 'THE STARTING LINE'],
+  ['FIVE HOURS. THE CHAIR HAS LEARNED YOUR SHAPE.', 'A WORN CUSHION'],
+  ['SEVEN DAYS. YOU STOPPED DECIDING AND STARTED ARRIVING.', 'THE WEEK ITSELF'],
+  ['FIFTY TIMES YOU SAT DOWN. THAT IS NOT LUCK. THAT IS YOU.', 'THE TALLY MARKS'],
+  ['THIRTY DAYS. THE HABIT READS YOU NOW, NOT THE OTHER WAY.', 'A MONTH OF MORNINGS'],
+];

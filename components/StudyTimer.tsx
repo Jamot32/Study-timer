@@ -6,7 +6,11 @@ import { confirmDestructive } from '../lib/confirm'
 import { useStudyTimer } from '../lib/useStudyTimer'
 import { awayOutcome } from '../lib/away'
 import { type Profile } from '../lib/auth'
-import { earnRolls, todayFocusMs } from '../lib/rolls'
+import { earnRolls } from '../lib/rolls'
+import { addBreakMinutes, loadBreakBank, MINUTES_PER_HOUR, spendBreakMinutes } from '../lib/breaks'
+import { loadSessions, totals } from '../lib/sessions'
+import { studyStreak, weeklyLongestMs } from '../lib/streak'
+import { loadSettings } from '../lib/settings'
 import { Avatar } from './Avatar'
 
 // ============================================================
@@ -25,6 +29,7 @@ const CYCLE_SECONDS = 3600
 const SKY_START = 0.22
 
 // 브레이크 적립 기준(초). 이건 하늘 주기와 무관하게 항상 1시간 유지.
+// 쌓인 분은 lib/breaks 가 저장한다. 앱을 닫아도 남는다.
 const BREAK_EARN_SECONDS = 3600
 
 // ---------- 테마 토큰 ----------
@@ -235,7 +240,10 @@ export function StudyTimer({
   const [mode, setMode] = useState<'FOCUS' | 'SHORT BREAK'>('FOCUS')
   const [breakBank, setBreakBank] = useState(0)
   const [streakBroken, setStreakBroken] = useState(false)
+  // Longest session this week and the run of days studied, both read from the
+  // saved history rather than from whatever this launch happened to see.
   const [weeklyMax, setWeeklyMax] = useState(0)
+  const [streakDays, setStreakDays] = useState(0)
   const [breakElapsed, setBreakElapsed] = useState(0)
   const [isFinishing, setIsFinishing] = useState(false)
   // Focus already saved today. The sky starts from here rather than from zero,
@@ -252,12 +260,16 @@ export function StudyTimer({
   const isRunning = onBreak ? true : state === 'running'
 
   const syncDayFocus = useCallback(async () => {
-    const ms = await todayFocusMs()
-    setDayFocusSec(Math.floor(ms / 1000))
+    const [sessions, prefs] = await Promise.all([loadSessions(), loadSettings()])
+    const now = new Date()
+    setDayFocusSec(Math.floor(totals(sessions, now, prefs.weekStartsOn).todayMs / 1000))
+    setWeeklyMax(Math.floor(weeklyLongestMs(sessions, now, prefs.weekStartsOn) / 1000))
+    setStreakDays(studyStreak(sessions, now))
   }, [])
 
   useEffect(() => {
     syncDayFocus()
+    loadBreakBank().then((bank) => setBreakBank(bank.minutes))
   }, [syncDayFocus])
 
   useEffect(() => {
@@ -266,6 +278,7 @@ export function StudyTimer({
     return () => clearInterval(interval)
   }, [onBreak])
 
+  // the running session counts toward the week's best as soon as it passes it
   useEffect(() => {
     if (onBreak) return
     setWeeklyMax((maximum) => Math.max(maximum, focusElapsed))
@@ -279,7 +292,9 @@ export function StudyTimer({
     if (onBreak) return
     const hours = Math.floor(focusElapsed / BREAK_EARN_SECONDS)
     if (hours > earnedHours.current) {
-      setBreakBank((value) => value + 5 * (hours - earnedHours.current))
+      const minutes = MINUTES_PER_HOUR * (hours - earnedHours.current)
+      setBreakBank((value) => value + minutes)
+      addBreakMinutes(minutes)
     }
     earnedHours.current = hours
   }, [focusElapsed, onBreak])
@@ -400,12 +415,16 @@ export function StudyTimer({
     }
   }
 
-  const useBreak = (minutes: number) => {
+  const useBreak = async (minutes: number) => {
     if (breakBank < minutes) return
+    // the store is the authority on what is left, so a stale screen cannot
+    // spend minutes twice
+    const next = await spendBreakMinutes(minutes)
+    if (next === null) return
     // pause rather than reset: the focus time accumulated so far must survive
     // the break so it can still be finished and saved.
     if (state === 'running') toggle()
-    setBreakBank((value) => value - minutes)
+    setBreakBank(next.minutes)
     setBreakElapsed(0)
     setMode('SHORT BREAK')
   }
@@ -433,7 +452,9 @@ export function StudyTimer({
                 <Text style={styles.name} numberOfLines={1}>
                   {name}
                 </Text>
-                <Text style={styles.level}>LVL 04</Text>
+                <Text style={styles.level}>
+                  {streakDays > 0 ? `${streakDays}D STREAK` : 'DAY ONE'}
+                </Text>
               </View>
             </View>
           </View>

@@ -2,8 +2,11 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { StyleSheet, Text, View } from 'react-native'
 import Svg, { G, Line, Polygon, Text as SvgText } from 'react-native-svg'
 import { PixelButton, T } from '@/components/pixel'
-import { QUOTES } from '@/components/quotes'
 import { loadRolls, spendRoll, type RollBank } from '@/lib/rolls'
+import { drawQuote, loadCanon, unlockedIds, type Canon, type CanonStats } from '@/lib/canon'
+import { loadSessions, dailyTotals, type StudySession } from '@/lib/sessions'
+import { studyStreak } from '@/lib/streak'
+import { type Quote } from '@/components/quotes'
 
 // ============================================================
 // PAGE ROLL — 무작위 페이지 뽑기
@@ -318,10 +321,6 @@ const HEAD_FONT = 12
 const BY_FONT = 9
 const BY_CHARS = Math.floor(TEXT_W / BY_FONT)          // 21
 
-// 쪽번호를 목록 자리로 바꾼다. 왼쪽 쪽은 늘 짝수라 그냥 나머지를 쓰면 절반은 영영 안 나온다.
-// 반으로 접은 뒤 목록 길이와 서로소인 37 을 곱해 돌리면 160 자리가 100 개를 다 훑는다.
-const mix = (n: number) => (n >> 1) * 37
-
 // 글은 한 줄씩 차례로 찍힌다. 타자기처럼.
 const REVEAL_MS = 90
 const REVEAL_MAX = 16
@@ -352,12 +351,19 @@ function pickRewards(seed: number): string[] {
 type TextLine = { text: string; size: number; color: string; align: 'start' | 'end'; glow?: boolean }
 
 // 왼쪽 쪽: 명언이 쪽을 다 차지하도록 크게, 맨 밑에 누가 한 말인지 작게.
-function quoteLines(seed: number): TextLine[] {
-  const [q, who] = QUOTES[mix(seed) % QUOTES.length]
+// 어떤 말이 실릴지는 쪽번호가 아니라 책이 기억하는 목록이 정한다(lib/canon).
+// 아직 못 본 말부터 나오고, 다 보면 처음으로 돌아간다.
+function quoteLines([q, who]: Quote, rare: boolean): TextLine[] {
+  const mark: TextLine[] = rare
+    ? [
+        { text: '* RARE *', size: BY_FONT, color: T.primary, align: 'start', glow: true },
+        { text: '', size: BY_FONT, color: T.ink, align: 'start' },
+      ]
+    : []
   const body: TextLine[] = wrap(q, QUOTE_CHARS).map((t) => ({ text: t, size: QUOTE_FONT, color: T.ink, align: 'start', glow: true }))
   // 말한 이가 길면 접는다. 줄 간격은 명언과 같아 자리는 그대로 이어진다.
   const by: TextLine[] = wrap('- ' + who, BY_CHARS).map((t) => ({ text: t, size: BY_FONT, color: T.primary, align: 'end' }))
-  return body.concat({ text: '', size: QUOTE_FONT, color: T.ink, align: 'start' }, by)
+  return mark.concat(body, { text: '', size: QUOTE_FONT, color: T.ink, align: 'start' }, by)
 }
 
 // 오른쪽 쪽: 보상 목록.
@@ -374,6 +380,15 @@ function rewardLines(seed: number): TextLine[] {
       })),
     ),
   )
+}
+
+// 저장된 기록에서 잠금 해제 조건을 뽑아낸다. 귀한 쪽은 앉아 본 만큼만 열린다.
+function statsFrom(sessions: StudySession[]): CanonStats {
+  let bestDayMs = 0
+  for (const ms of dailyTotals(sessions).values()) {
+    if (ms > bestDayMs) bestDayMs = ms
+  }
+  return { bestDayMs, streakDays: studyStreak(sessions), sessions: sessions.length }
 }
 
 // onFocusChange: ROLL 로 책에 집중하는 동안 true. 바깥(탭 바)도 같이 치우라고 알린다.
@@ -403,9 +418,26 @@ export default function PageRoll({
 
   // 모아 둔 ROLL. 공부를 끝낼 때 쌓이고, 한 번 뽑을 때마다 하나 준다.
   const [bank, setBank] = useState<RollBank | null>(null)
+  // 펼친 쪽에 실을 말. 쪽을 고르는 순간 뽑아서 본 것으로 적어 둔다.
+  const [drawn, setDrawn] = useState<{ quote: Quote; rare: boolean } | null>(null)
+  // 지금까지 본 말과 열린 말의 수. 첫 화면에 몇 쪽까지 모았는지 보여 준다.
+  const [canon, setCanon] = useState<Canon | null>(null)
+  const [stats, setStats] = useState<CanonStats | null>(null)
+
   useEffect(() => {
     let alive = true
-    loadRolls().then((next) => { if (alive) setBank(next) })
+    const read = async () => {
+      const [nextBank, nextCanon, sessions] = await Promise.all([
+        loadRolls(),
+        loadCanon(),
+        loadSessions(),
+      ])
+      if (!alive) return
+      setBank(nextBank)
+      setCanon(nextCanon)
+      setStats(statsFrom(sessions))
+    }
+    read()
     return () => { alive = false }
   }, [refreshKey])
 
@@ -502,6 +534,7 @@ export default function PageRoll({
   // 책을 덮고 책장에 도로 꽂은 뒤 첫 화면으로. 책장만 보던 중이면 바로 첫 화면.
   const reset = useCallback(() => {
     if (busy || mode === 'idle') return
+    setDrawn(null)
     setPick(null)
     setHover(null)
     setShelfHover(null)
@@ -532,8 +565,13 @@ export default function PageRoll({
       setHover(null)
       setMode('flat')
       animate(flatScene(pick.lo, pick.hi))
+      // the page is only written when it is actually read
+      drawQuote(stats ?? { bestDayMs: 0, streakDays: 0, sessions: 0 }).then((next) => {
+        setDrawn({ quote: next.quote, rare: next.rare })
+        setCanon(next.canon)
+      })
     }
-  }, [busy, pick, mode, animate, reset])
+  }, [busy, pick, mode, animate, reset, stats])
 
   const flat = mode === 'flat'
   const { tilt, panX, theta, cover, back } = scene
@@ -628,7 +666,7 @@ export default function PageRoll({
           fill={T.bg} stroke={marked ? T.primary : T.ink} strokeWidth={4} />
         {showText
           ? i === pick!.lo
-            ? pageText(th, quoteLines(pick!.a), QUOTE_STEP)
+            ? pageText(th, drawn ? quoteLines(drawn.quote, drawn.rare) : [], QUOTE_STEP)
             : pageText(th, rewardLines(pick!.b), LIST_STEP)
           : Array.from({ length: RULES }, (_, r) => {
           const v = 0.1 + r * 0.045
@@ -867,8 +905,10 @@ export default function PageRoll({
           </View>
 
           <View style={styles.metaRow}>
-            <Text style={styles.metaLabel}>TOTAL PAGES</Text>
-            <Text style={styles.metaValue}>{TOTAL}</Text>
+            <Text style={styles.metaLabel}>CANON READ</Text>
+            <Text style={styles.metaValue}>
+              {canon === null || stats === null ? '--' : `${canon.seen.length}/${unlockedIds(stats).length}`}
+            </Text>
           </View>
 
           <View style={styles.keys}>

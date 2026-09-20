@@ -1,4 +1,4 @@
-import { loadSessions, storage, totals } from './sessions';
+import { storage } from './sessions';
 
 export const ROLLS_STORAGE_KEY = '@study_timer/rolls';
 
@@ -78,14 +78,5 @@ export async function clearRolls(): Promise<void> {
     await storage.removeItem(ROLLS_STORAGE_KEY);
   } catch (error) {
     console.error('Failed to clear rolls:', error);
-  }
-}
-
-/** Study time already banked today, in ms. The sky picks up where it left off. */
-export async function todayFocusMs(): Promise<number> {
-  try {
-    return totals(await loadSessions()).todayMs;
-  } catch {
-    return 0;
   }
 }

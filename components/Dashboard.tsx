@@ -1,7 +1,7 @@
 import { ArrowLeft } from 'lucide-react-native';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { FlatList, RefreshControl, StyleSheet, Text, View } from 'react-native';
-import StudyGraph from '@/components/StudyGraph';
+import HistoryShelf from '@/components/HistoryShelf';
 import { PixelBox, PixelButton, PixelProgress, T } from '@/components/pixel';
 import {
   formatDuration,
@@ -150,7 +150,7 @@ export default function Dashboard({ isActive = true, refreshKey = 0, onBack }: D
         {stat('MONTH', monthMs)}
       </View>
 
-      <StudyGraph sessions={sessions} weekStartsOn={settings.weekStartsOn} />
+      <HistoryShelf sessions={sessions} />
 
       {bestDayMs > 0 ? (
         <PixelBox shadow={0} boxStyle={styles.progressBox}>
