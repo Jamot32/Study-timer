@@ -1,8 +1,7 @@
-import { ArrowLeft } from 'lucide-react-native';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { FlatList, RefreshControl, StyleSheet, Text, View } from 'react-native';
 import StudyGraph from '@/components/StudyGraph';
-import { PixelBox, PixelButton, PixelProgress, T } from '@/components/pixel';
+import { PixelBox, PixelProgress, T } from '@/components/pixel';
 import {
   formatDuration,
   getWeekStart,
@@ -18,7 +17,6 @@ export interface DashboardProps {
   isActive?: boolean;
   refreshKey?: number;
   /** Back to the timer. */
-  onBack?: () => void;
 }
 
 function formatStartTime(isoString: string): string {
@@ -49,7 +47,7 @@ function getBestDayOfWeek(
   return maxMs;
 }
 
-export default function Dashboard({ isActive = true, refreshKey = 0, onBack }: DashboardProps) {
+export default function Dashboard({ isActive = true, refreshKey = 0 }: DashboardProps) {
   const [sessions, setSessions] = useState<StudySession[]>([]);
   const [settings, setSettings] = useState<Settings>(DEFAULT_SETTINGS);
   const [refreshing, setRefreshing] = useState(false);
@@ -133,15 +131,6 @@ export default function Dashboard({ isActive = true, refreshKey = 0, onBack }: D
           </Text>
           <Text style={styles.subtitle}>OVERVIEW OF YOUR FOCUSED TIME</Text>
         </View>
-        <PixelButton
-          shadow={0}
-          color={T.secondary}
-          onPress={onBack}
-          accessibilityLabel="Back to timer"
-          boxStyle={styles.backBox}
-        >
-          <ArrowLeft size={20} color={T.ink} />
-        </PixelButton>
       </View>
 
       <View style={styles.statRow}>
@@ -228,7 +217,6 @@ const styles = StyleSheet.create({
   header: { gap: 20, paddingBottom: 16 },
   headerRow: { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12 },
   headerText: { flex: 1 },
-  backBox: { width: 40, height: 40, alignItems: 'center', justifyContent: 'center' },
   title: { fontFamily: T.fontPixel, fontSize: 13, color: T.ink },
   subtitle: { fontFamily: T.fontPixel, fontSize: 8, color: T.muted, marginTop: 10 },
 

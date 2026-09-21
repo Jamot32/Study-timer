@@ -1,4 +1,3 @@
-import { ArrowLeft } from 'lucide-react-native';
 import React, { useCallback, useEffect, useState } from 'react';
 import { ScrollView, StyleSheet, Text, View } from 'react-native';
 import { PixelBox, PixelButton, T } from '@/components/pixel';
@@ -53,7 +52,6 @@ export interface SettingsProps {
   /** Called after a change that the dashboard's numbers depend on. */
   onChanged?: () => void;
   /** Back to the timer. */
-  onBack?: () => void;
   /** The signed-in (local) profile. */
   profile?: Profile;
   /** Opens the profile editor. */
@@ -64,7 +62,6 @@ export interface SettingsProps {
 
 export default function Settings({
   onChanged,
-  onBack,
   profile,
   onEditProfile,
   onSignOut,
@@ -118,15 +115,6 @@ export default function Settings({
             </Text>
             <Text style={styles.subtitle}>WEEK BOUNDARY AND STORED HISTORY</Text>
           </View>
-          <PixelButton
-            shadow={0}
-            color={T.secondary}
-            onPress={onBack}
-            accessibilityLabel="Back to timer"
-            boxStyle={styles.backBox}
-          >
-            <ArrowLeft size={20} color={T.ink} />
-          </PixelButton>
         </View>
 
         <PixelBox shadow={0} boxStyle={styles.card}>
@@ -210,7 +198,6 @@ const styles = StyleSheet.create({
   frame: { padding: 14 },
   headerRow: { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12 },
   headerText: { flex: 1 },
-  backBox: { width: 40, height: 40, alignItems: 'center', justifyContent: 'center' },
   body: { gap: 18 },
   title: { fontFamily: T.fontPixel, fontSize: 13, color: T.ink },
   subtitle: { fontFamily: T.fontPixel, fontSize: 8, color: T.muted, marginTop: 10 },

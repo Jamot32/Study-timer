@@ -602,9 +602,9 @@ export default function PageRoll({ onFocusChange }: { onFocusChange?: (focused: 
     const marked = isPick && !showText
     return (
       <G key={'leaf-' + i} onPress={() => tapSheet(i)}>
-        {/* 골라 둔 장도 표지가 아니라 종이다. 테두리 색만 바꿔 표시한다. */}
+        {/* 골라 둔 장은 쪽 전체를 주황으로 칠해 한눈에 띄게 한다. 테두리는 잉크 그대로. */}
         <Polygon points={quad(th, tilt, panX)}
-          fill={T.bg} stroke={marked ? T.primary : T.ink} strokeWidth={4} />
+          fill={marked ? T.primary : T.bg} stroke={T.ink} strokeWidth={4} />
         {showText
           ? i === pick!.lo
             ? pageText(th, quoteLines(pick!.a), QUOTE_STEP)
@@ -618,10 +618,10 @@ export default function PageRoll({ onFocusChange }: { onFocusChange?: (focused: 
           const a = leafPt(th, left ? 0.88 - len : 0.12, v, tilt, panX)
           const b = leafPt(th, left ? 0.88 : 0.12 + len, v, tilt, panX)
           if (marked) {
-            // 골라 둔 장은 발광 없이 또렷한 잉크 줄
+            // 골라 둔 장은 발광 없이 또렷한 줄. 바탕이 주황이라 밝은 종이색으로 긋는다.
             return (
               <Line key={r} x1={a.x} y1={a.y} x2={b.x} y2={b.y}
-                stroke={T.ink} strokeWidth={4} />
+                stroke={T.primaryFg} strokeWidth={4} />
             )
           }
           // 고르기 전에는 읽히지 않는다. 두 겹으로 겹쳐 발광처럼 보이게.

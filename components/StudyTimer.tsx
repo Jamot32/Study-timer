@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Alert, AppState, Pressable, StyleSheet, Text, View, type StyleProp, type ViewStyle } from 'react-native'
 import { LinearGradient } from 'expo-linear-gradient'
-import { BarChart3, Check, Moon, Pause, Play, RotateCcw, Settings2, Sun } from 'lucide-react-native'
+import { Check, Moon, Pause, Play, RotateCcw, Sun } from 'lucide-react-native'
 import { confirmDestructive } from '../lib/confirm'
 import { useStudyTimer } from '../lib/useStudyTimer'
 import { awayOutcome } from '../lib/away'
@@ -218,14 +218,10 @@ function PixelProgress({ value }: { value: number }) {
 // ---------- 메인 컴포넌트 ----------
 export function StudyTimer({
   onFinished,
-  onOpenStats,
-  onOpenSettings,
   onOpenProfile,
   profile,
 }: {
   onFinished?: () => void
-  onOpenStats?: () => void
-  onOpenSettings?: () => void
   onOpenProfile?: () => void
   /** Logged-in profile; drives the header avatar, outer line, title and name. */
   profile?: Profile
@@ -409,26 +405,6 @@ export function StudyTimer({
               </View>
             </View>
           </View>
-          <View style={styles.headerActions}>
-            <PixelButton
-              shadow={0}
-              color={T.secondary}
-              onPress={onOpenStats}
-              accessibilityLabel="Open study stats"
-              boxStyle={styles.iconButtonSmall}
-            >
-              <BarChart3 size={20} color={T.ink} />
-            </PixelButton>
-            <PixelButton
-              shadow={0}
-              color={T.secondary}
-              onPress={onOpenSettings}
-              accessibilityLabel="Open settings"
-              boxStyle={styles.iconButtonSmall}
-            >
-              <Settings2 size={20} color={T.ink} />
-            </PixelButton>
-          </View>
         </View>
 
         {/* 상태 줄 */}
@@ -564,18 +540,10 @@ const styles = StyleSheet.create({
     paddingVertical: 14,
   },
   headerLeft: { flexDirection: 'row', alignItems: 'center', gap: 12 },
-  headerActions: { flexDirection: 'row', gap: 8 },
   label: { fontFamily: T.fontPixel, fontSize: 9, color: T.muted },
   nameRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 4 },
   name: { fontFamily: T.fontPixel, fontSize: 13, color: T.ink },
   level: { fontFamily: T.fontPixel, fontSize: 9, color: T.primary },
-  iconButtonSmall: {
-    width: 40,
-    height: 40,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: T.secondary,
-  },
 
   statusRow: {
     flexDirection: 'row',
