@@ -58,3 +58,12 @@ Then create a development build with `npm run ios` or `npm run android`. Native 
 ## Operational limits
 
 This backend is intended for a small closed user group. Apps Script quotas, latency, and limited operational controls make it unsuitable as a durable public authentication backend. Study sessions remain device-local; the sheet is only an authorization registry.
+
+## Current deployment
+
+- Google Cloud project: `study-timer-509421`. OAuth consent screen is External, in Testing mode, with test user `syoung3323@gmail.com`. Only the Web OAuth client exists. iOS and Android clients wait for a real bundle ID (currently the placeholder `com.anonymous.study-timer`).
+- Apps Script project `study-timer-auth` is bound to the "Study timer Login" sheet rather than standalone. This works because `Code.gs` opens the sheet with `openById`.
+- Script properties: `GOOGLE_WEB_CLIENT_ID` is set. `SPREADSHEET_ID` is not set, so `DEFAULT_SPREADSHEET_ID` in `Code.gs` is used.
+- Deployment: Web app, Execute as Me, Access Anyone, version 1. The `/exec` URL lives in the local `.env.local` as `EXPO_PUBLIC_AUTH_ENDPOINT`.
+- To ship code changes, use **Deploy → Manage deployments → edit (pencil) → Version: New version**. This keeps the `/exec` URL the same. **New deployment** creates a new URL instead.
+- Smoke test: `curl -sL <exec-url>` returns `{"ok":true,"name":"study-timer-auth"}`. `curl -sL -d '{"action":"login","idToken":"bad"}' <exec-url>` returns `ok:false` with code `provider-error`. Don't pass `-X POST`: it keeps POST across Apps Script's 302 redirect and returns a Drive "Page Not Found" page.
