@@ -1,6 +1,6 @@
 import React, { useMemo } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
-import { T } from '@/components/pixel';
+import { Card, RADIUS, T } from '@/components/nova';
 import {
   dailyTotals,
   dayKey,
@@ -12,9 +12,8 @@ import {
 
 const WEEKS = 12;
 
-/** Empty → busiest. Endpoints are the palette tokens; the mid-tones are
- *  interpolated between them, since the palette has no 5-step ramp. */
-const LEVEL_COLOR = [T.bg, '#f2b98f', '#eb9463', T.primary, '#a93d17'];
+/** 빈 날 → 가장 바쁜 날. 옅은 잎사귀에서 시작해 깊은 앰버로 익는 램프. */
+const LEVEL_COLOR = [T.bgSunk, T.accentSoft, '#C9D4B4', '#DCC078', T.primary];
 
 export interface StudyGraphProps {
   sessions: StudySession[];
@@ -68,13 +67,13 @@ export default function StudyGraph({ sessions, weekStartsOn }: StudyGraphProps) 
   return (
     <View style={styles.wrap}>
       <View style={styles.headerRow}>
-        <Text style={styles.title}>LAST 12 WEEKS</Text>
+        <Text style={styles.title}>Last 12 weeks</Text>
         <Text style={styles.caption}>
-          {formatDuration(totalMs).toUpperCase()} / {activeDays} {activeDays === 1 ? 'DAY' : 'DAYS'}
+          {formatDuration(totalMs)} · {activeDays} {activeDays === 1 ? 'day' : 'days'}
         </Text>
       </View>
 
-      <View style={styles.grid}>
+      <Card level={0} tone="alt" radius={RADIUS.md} boxStyle={styles.grid}>
         {columns.map((week, w) => (
           <View key={w} style={styles.week}>
             {week.map((day) => (
@@ -91,14 +90,14 @@ export default function StudyGraph({ sessions, weekStartsOn }: StudyGraphProps) 
             ))}
           </View>
         ))}
-      </View>
+      </Card>
 
       <View style={styles.legend}>
-        <Text style={styles.caption}>LESS</Text>
+        <Text style={styles.caption}>Less</Text>
         {LEVEL_COLOR.map((color) => (
           <View key={color} style={[styles.legendCell, { backgroundColor: color }]} />
         ))}
-        <Text style={styles.caption}>MORE</Text>
+        <Text style={styles.caption}>More</Text>
       </View>
     </View>
   );
@@ -108,11 +107,11 @@ export default function StudyGraph({ sessions, weekStartsOn }: StudyGraphProps) 
 const styles = StyleSheet.create({
   wrap: { gap: 10 },
   headerRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  title: { fontFamily: T.fontPixel, fontSize: 10, color: T.ink },
-  caption: { fontFamily: T.fontPixel, fontSize: 8, color: T.muted },
-  grid: { flexDirection: 'row', gap: 2, borderWidth: 2, borderColor: T.ink, padding: 3, backgroundColor: T.secondary },
-  week: { flex: 1, gap: 2 },
-  cell: { aspectRatio: 1, borderWidth: 1, borderColor: T.ink },
+  title: { fontFamily: T.fontMedium, fontSize: 15, color: T.ink },
+  caption: { fontFamily: T.font, fontSize: 12, color: T.muted },
+  grid: { flexDirection: 'row', gap: 3, padding: 8 },
+  week: { flex: 1, gap: 3 },
+  cell: { aspectRatio: 1, borderRadius: 3 },
   legend: { flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-end', gap: 4 },
-  legendCell: { width: 10, height: 10, borderWidth: 1, borderColor: T.ink },
+  legendCell: { width: 11, height: 11, borderRadius: 3 },
 });
