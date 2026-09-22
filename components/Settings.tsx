@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { ScrollView, StyleSheet, Text, View } from 'react-native';
-import { PixelBox, PixelButton, T } from '@/components/pixel';
+import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Button, Card, RADIUS, T } from '@/components/nova';
 import { confirmDestructive } from '@/lib/confirm';
 import { clearProfile, type Profile } from '@/lib/auth';
 import { Avatar } from '@/components/Avatar';
@@ -8,8 +8,8 @@ import { clearSessions } from '@/lib/sessions';
 import { loadSettings, saveSettings, type Settings as SettingsValue } from '@/lib/settings';
 
 const WEEK_START_CHOICES = [
-  { label: 'MONDAY', value: 1 as const },
-  { label: 'SUNDAY', value: 0 as const },
+  { label: 'Monday', value: 1 as const },
+  { label: 'Sunday', value: 0 as const },
 ];
 
 function Segmented<T_ extends string | number>({
@@ -26,22 +26,24 @@ function Segmented<T_ extends string | number>({
       {choices.map((choice) => {
         const selected = choice.value === value;
         return (
-          <PixelButton
+          <Pressable
             key={String(choice.value)}
-            shadow={2}
-            color={selected ? T.primary : T.bg}
+            accessibilityRole="button"
             accessibilityState={{ selected }}
             onPress={() => onChange(choice.value)}
-            style={styles.segment}
-            boxStyle={styles.segmentBox}
+            style={({ pressed }) => [
+              styles.segment,
+              selected && styles.segmentSelected,
+              pressed && { opacity: 0.7 },
+            ]}
           >
             <Text
-              style={[styles.segmentLabel, { color: selected ? T.primaryFg : T.muted }]}
+              style={[styles.segmentLabel, selected && styles.segmentLabelSelected]}
               numberOfLines={1}
             >
-              {choice.label.toUpperCase()}
+              {choice.label}
             </Text>
-          </PixelButton>
+          </Pressable>
         );
       })}
     </View>
@@ -106,118 +108,111 @@ export default function Settings({
       contentContainerStyle={{ paddingBottom: 40 }}
       showsVerticalScrollIndicator={false}
     >
-      <PixelBox shadow={6} boxStyle={styles.frame}>
       <View style={styles.body}>
-        <View style={styles.headerRow}>
-          <View style={styles.headerText}>
-            <Text style={styles.title} accessibilityRole="header">
-              CONFIG
-            </Text>
-            <Text style={styles.subtitle}>WEEK BOUNDARY AND STORED HISTORY</Text>
-          </View>
+        <View style={styles.headerText}>
+          <Text style={styles.title} accessibilityRole="header">
+            Settings
+          </Text>
+          <Text style={styles.subtitle}>Week boundary, profile and stored history.</Text>
         </View>
 
-        <PixelBox shadow={0} boxStyle={styles.card}>
+        <Card level={1} boxStyle={styles.card}>
           <Text style={styles.cardTitle} accessibilityRole="header">
-            WEEK STARTS ON
+            Week starts on
           </Text>
-          <Text style={styles.cardDesc}>Sets the boundary for the WEEK total.</Text>
+          <Text style={styles.cardDesc}>Sets the boundary for your weekly total.</Text>
           <Segmented
             choices={WEEK_START_CHOICES}
             value={settings.weekStartsOn}
             onChange={(weekStartsOn) => update({ weekStartsOn })}
           />
-        </PixelBox>
+        </Card>
 
         {profile ? (
-          <PixelBox shadow={0} boxStyle={styles.card}>
+          <Card level={1} boxStyle={styles.card}>
             <Text style={styles.cardTitle} accessibilityRole="header">
-              PROFILE
+              Profile
             </Text>
             <Text style={styles.cardDesc}>
-              SIGNED IN AS {profile.name.toUpperCase()}. THIS DEVICE ONLY — NOTHING IS SYNCED YET.
+              Signed in as {profile.name}. This device only — nothing is synced yet.
             </Text>
 
             <View style={styles.previewRow}>
               <Avatar profile={profile} size={56} />
               <View style={styles.previewText}>
                 <Text style={styles.previewTitle} numberOfLines={1}>
-                  {(profile.title || 'USERNAME').toUpperCase()}
+                  {profile.title || 'Username'}
                 </Text>
                 <Text style={styles.previewName} numberOfLines={1}>
-                  {profile.name.toUpperCase()}
+                  {profile.name}
                 </Text>
               </View>
             </View>
 
-            <PixelButton
-              shadow={2}
-              color={T.primary}
-              onPress={onEditProfile}
-              style={styles.clearWrap}
-              boxStyle={styles.clearBox}
-            >
-              <Text style={[styles.clearLabel, { color: T.primaryFg }]}>EDIT PROFILE</Text>
-            </PixelButton>
-
-            <PixelButton
-              shadow={2}
-              color={T.bg}
-              onPress={handleSignOut}
-              style={styles.clearWrap}
-              boxStyle={styles.clearBox}
-            >
-              <Text style={styles.clearLabel}>SIGN OUT</Text>
-            </PixelButton>
-          </PixelBox>
+            <Button block variant="primary" onPress={onEditProfile} style={styles.actionGap}>
+              Edit profile
+            </Button>
+            <Button block variant="outline" onPress={handleSignOut} style={styles.actionGap}>
+              Sign out
+            </Button>
+          </Card>
         ) : null}
 
-        <PixelBox shadow={0} boxStyle={styles.card}>
+        <Card level={1} boxStyle={styles.card}>
           <Text style={styles.cardTitle} accessibilityRole="header">
-            STUDY HISTORY
+            Study history
           </Text>
           <Text style={styles.cardDesc}>Sessions are stored on this device only.</Text>
-          <PixelButton
-            shadow={2}
-            color={T.bg}
-            onPress={handleClear}
-            style={styles.clearWrap}
-            boxStyle={styles.clearBox}
-          >
-            <Text style={styles.clearLabel}>CLEAR ALL HISTORY</Text>
-          </PixelButton>
-        </PixelBox>
+          <Button block variant="outline" onPress={handleClear} style={styles.actionGap}>
+            Clear all history
+          </Button>
+        </Card>
       </View>
-      </PixelBox>
     </ScrollView>
   );
 }
 
 const styles = StyleSheet.create({
-  screen: { flex: 1, width: '100%', backgroundColor: T.bg, paddingHorizontal: 16, paddingTop: 4 },
-  frame: { padding: 14 },
-  headerRow: { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12 },
+  screen: { flex: 1, width: '100%', backgroundColor: T.bg, paddingHorizontal: 16, paddingTop: 8 },
   headerText: { flex: 1 },
-  body: { gap: 18 },
-  title: { fontFamily: T.fontPixel, fontSize: 13, color: T.ink },
-  subtitle: { fontFamily: T.fontPixel, fontSize: 8, color: T.muted, marginTop: 10 },
+  body: { gap: 16 },
+  title: { fontFamily: T.fontDisplay, fontSize: 28, color: T.ink, letterSpacing: -0.4 },
+  subtitle: { fontFamily: T.font, fontSize: 14, color: T.muted, marginTop: 4 },
 
-  card: { padding: 14, backgroundColor: T.secondary },
-  // cards are flat panels inside the frame, matching the timer's break-bank card
-  cardTitle: { fontFamily: T.fontPixel, fontSize: 9, color: T.ink },
-  cardDesc: { fontFamily: T.fontPixel, fontSize: 8, lineHeight: 14, color: T.muted, marginTop: 8 },
+  card: { padding: 18 },
+  cardTitle: { fontFamily: T.fontMedium, fontSize: 16, color: T.ink },
+  cardDesc: { fontFamily: T.font, fontSize: 13, lineHeight: 20, color: T.muted, marginTop: 6 },
 
-  segmented: { flexDirection: 'row', gap: 8, marginTop: 14 },
-  segment: { flex: 1 },
-  segmentBox: { height: 38, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 2 },
-  segmentLabel: { fontFamily: T.fontPixel, fontSize: 8 },
+  // 트랙 안에서 알약이 미끄러지는 세그먼트. 테두리 대신 면으로 선택을 보인다.
+  segmented: {
+    flexDirection: 'row',
+    gap: 4,
+    marginTop: 16,
+    padding: 4,
+    borderRadius: RADIUS.md,
+    backgroundColor: T.bgSunk,
+  },
+  segment: {
+    flex: 1,
+    height: 38,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: RADIUS.sm,
+  },
+  segmentSelected: { backgroundColor: T.card },
+  segmentLabel: { fontFamily: T.fontMedium, fontSize: 14, color: T.muted },
+  segmentLabelSelected: { color: T.ink },
 
-  previewRow: { flexDirection: 'row', alignItems: 'center', gap: 12, marginTop: 14 },
+  previewRow: { flexDirection: 'row', alignItems: 'center', gap: 14, marginTop: 16 },
   previewText: { flex: 1 },
-  previewTitle: { fontFamily: T.fontPixel, fontSize: 8, color: T.muted },
-  previewName: { fontFamily: T.fontPixel, fontSize: 11, color: T.ink, marginTop: 8 },
+  previewTitle: {
+    fontFamily: T.fontMedium,
+    fontSize: 11,
+    letterSpacing: 1,
+    textTransform: 'uppercase',
+    color: T.muted,
+  },
+  previewName: { fontFamily: T.fontDisplay, fontSize: 19, color: T.ink, marginTop: 4 },
 
-  clearWrap: { marginTop: 14 },
-  clearBox: { height: 40, alignItems: 'center', justifyContent: 'center' },
-  clearLabel: { fontFamily: T.fontPixel, fontSize: 8, color: T.ink },
+  actionGap: { marginTop: 12 },
 });

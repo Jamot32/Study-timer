@@ -1,19 +1,19 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { Alert, AppState, Pressable, StyleSheet, Text, View, type StyleProp, type ViewStyle } from 'react-native'
+import { Alert, AppState, Pressable, StyleSheet, Text, View } from 'react-native'
 import { LinearGradient } from 'expo-linear-gradient'
-import { Check, Eye, Flag, Moon, Pause, Play, RotateCcw, Sun } from 'lucide-react-native'
+import { Check, Flag, Moon, Pause, Play, RotateCcw, Sun } from 'lucide-react-native'
 import { confirmDestructive } from '../lib/confirm'
 import { useStudyTimer } from '../lib/useStudyTimer'
 import { awayOutcome } from '../lib/away'
 import { type Profile } from '../lib/auth'
 import { Avatar } from './Avatar'
-import PixelConfirm from './PixelConfirm'
-import OpponentView from './OpponentView'
+import ConfirmDialog from './PixelConfirm'
+import { Button, Card, ProgressBar, RADIUS, T } from './nova'
+import { OPPONENT } from './BattleLobby'
 
 // ============================================================
-// PIXEL STUDY TIMER — React Native (Expo)
-// v2: absoluteFill 호환 수정 / 다이얼 그림자 원형 수정 /
-//     safe area 대응 / 하늘 전환 주기 상수화
+// STUDY TIMER — React Native (Expo)
+// 하늘이 도는 원형 다이얼. 색은 nova / secret garden 팔레트를 따른다.
 // ============================================================
 
 // ---------- 설정 ----------
@@ -26,17 +26,6 @@ const SKY_START = 0.22
 
 // 브레이크 적립 기준(초). 이건 하늘 주기와 무관하게 항상 1시간 유지.
 const BREAK_EARN_SECONDS = 3600
-
-// ---------- 테마 토큰 ----------
-const T = {
-  bg: '#f4f0e6',
-  ink: '#2e2218',
-  primary: '#d95b2e',
-  primaryFg: '#faf6ee',
-  secondary: '#e3dcc9',
-  muted: '#6e6152',
-  fontPixel: 'PressStart2P_400Regular',
-}
 
 // ---------- 프로시저럴 하늘 ----------
 // 한 사이클(CYCLE_SECONDS) 동안 아래 키프레임 사이를 매초 보간한다.
@@ -59,17 +48,17 @@ const lerpColor = (a: string, b: string, amount: number) => {
 type SkyPhase = { t: number; top: string; bottom: string }
 
 const SKY_PHASES: SkyPhase[] = [
-  { t: 0.0, top: '#2b2a66', bottom: '#1e3f8f' },  // 동트기 전: 남색 → 짙은 파랑
-  { t: 0.07, top: '#6b3fa0', bottom: '#e87ea1' }, // 여명: 보라 → 분홍
-  { t: 0.13, top: '#f5a86c', bottom: '#f7c948' }, // 일출: 연한 주황 → 황금색
-  { t: 0.22, top: '#87ceeb', bottom: '#4aa3df' }, // 아침~낮: 하늘색 → 맑은 파랑
-  { t: 0.5, top: '#87ceeb', bottom: '#4aa3df' },  // 낮 유지
-  { t: 0.57, top: '#f7d154', bottom: '#e8752a' }, // 해 질 녘: 노랑 → 짙은 주황
-  { t: 0.63, top: '#d94a3d', bottom: '#ef88a7' }, // 일몰(노을): 붉은색 → 분홍
-  { t: 0.7, top: '#7a4f9e', bottom: '#4a4a9e' },  // 매직 아워: 보라 → 남보라
-  { t: 0.78, top: '#16204d', bottom: '#050510' }, // 밤: 짙은 남색 → 검은색
-  { t: 0.94, top: '#16204d', bottom: '#050510' }, // 밤 유지
-  { t: 1.0, top: '#2b2a66', bottom: '#1e3f8f' },  // 다시 동트기 전 (루프 연결)
+  { t: 0.0, top: '#2E3358', bottom: '#3B4A6B' },  // 동트기 전: 흐린 남색
+  { t: 0.07, top: '#6A5E82', bottom: '#D9A08C' }, // 여명: 자줏빛 → 살구
+  { t: 0.13, top: '#E7B473', bottom: '#F0D399' }, // 일출: 앰버 → 연한 금빛
+  { t: 0.22, top: '#BBD2C8', bottom: '#8FAF95' }, // 아침~낮: 안개 낀 초록빛 하늘
+  { t: 0.5, top: '#BBD2C8', bottom: '#8FAF95' },  // 낮 유지
+  { t: 0.57, top: '#EBC983', bottom: '#C98F4F' }, // 해 질 녘: 금빛 → 앰버
+  { t: 0.63, top: '#C87B54', bottom: '#9C6E52' }, // 일몰: 구운 주황 → 흙빛
+  { t: 0.7, top: '#6E6180', bottom: '#4C4F63' },  // 매직 아워: 흐린 보라
+  { t: 0.78, top: '#262B3D', bottom: '#151824' }, // 밤: 깊은 남색
+  { t: 0.94, top: '#262B3D', bottom: '#151824' }, // 밤 유지
+  { t: 1.0, top: '#2E3358', bottom: '#3B4A6B' },  // 다시 동트기 전 (루프 연결)
 ]
 
 type SkyKeyframe = { t: number; colors: [string, string, string] }
@@ -128,106 +117,20 @@ const formatWeeklyMax = (totalSeconds: number) => {
   return `${h}H ${m.toString().padStart(2, '0')}M`
 }
 
-// ---------- 픽셀 프리미티브 ----------
-type PixelBoxProps = {
-  shadow?: number
-  style?: StyleProp<ViewStyle>
-  boxStyle?: StyleProp<ViewStyle>
-  shadowStyle?: StyleProp<ViewStyle>
-  children?: React.ReactNode
-}
-
-function PixelBox({ shadow = 4, style, boxStyle, shadowStyle, children }: PixelBoxProps) {
-  return (
-    <View style={[{ paddingRight: shadow, paddingBottom: shadow }, style]}>
-      {shadow > 0 && (
-        <View
-          pointerEvents="none"
-          style={[ABS_FILL, { backgroundColor: T.ink, left: shadow, top: shadow }, shadowStyle]}
-        />
-      )}
-      <View style={[styles.pixelBorder, boxStyle]}>{children}</View>
-    </View>
-  )
-}
-
-type PixelButtonProps = {
-  onPress?: () => void
-  disabled?: boolean
-  shadow?: number
-  color?: string
-  style?: StyleProp<ViewStyle>
-  boxStyle?: StyleProp<ViewStyle>
-  accessibilityLabel?: string
-  children?: React.ReactNode
-}
-
-function PixelButton({
-  onPress,
-  disabled,
-  shadow = 4,
-  color = T.primary,
-  style,
-  boxStyle,
-  accessibilityLabel,
-  children,
-}: PixelButtonProps) {
-  const [pressed, setPressed] = useState(false)
-  const shift = pressed && !disabled ? shadow : 0
-
-  return (
-    <Pressable
-      onPress={onPress}
-      disabled={disabled}
-      onPressIn={() => setPressed(true)}
-      onPressOut={() => setPressed(false)}
-      accessibilityRole="button"
-      accessibilityLabel={accessibilityLabel}
-      style={[{ paddingRight: shadow, paddingBottom: shadow, opacity: disabled ? 0.4 : 1 }, style]}
-    >
-      {shadow > 0 && (
-        <View
-          pointerEvents="none"
-          style={[ABS_FILL, { backgroundColor: T.ink, left: shadow, top: shadow }]}
-        />
-      )}
-      <View
-        style={[
-          styles.pixelBorder,
-          { backgroundColor: color, transform: [{ translateX: shift }, { translateY: shift }] },
-          boxStyle,
-        ]}
-      >
-        {children}
-      </View>
-    </Pressable>
-  )
-}
-
-function PixelProgress({ value }: { value: number }) {
-  const stepped = Math.floor(value * 60) / 60
-  return (
-    <View
-      accessibilityRole="progressbar"
-      accessibilityValue={{ min: 0, max: 100, now: Math.round(value * 100) }}
-      style={styles.progressTrack}
-    >
-      <View style={[styles.progressFill, { width: `${stepped * 100}%` }]} />
-    </View>
-  )
-}
-
 // ---------- 메인 컴포넌트 ----------
 export function StudyTimer({
   onFinished,
   onOpenProfile,
   onResign,
+  matchStarting = false,
   profile,
 }: {
   onFinished?: () => void
   onOpenProfile?: () => void
   /** Give up the match: drops the session unsaved and hands the screen back. */
   onResign?: () => void
+  /** 3-2-1 카운트다운이 도는 중. 끝나기 전까지는 상대 시계도 멈춰 있다. */
+  matchStarting?: boolean
   /** Logged-in profile; drives the header avatar, outer line, title and name. */
   profile?: Profile
 }) {
@@ -238,7 +141,6 @@ export function StudyTimer({
   const [breakElapsed, setBreakElapsed] = useState(0)
   const [isFinishing, setIsFinishing] = useState(false)
   const [confirmResign, setConfirmResign] = useState(false)
-  const [showOpponent, setShowOpponent] = useState(false)
   // 상대 타이머. 서버가 없으니 매치가 걸린 동안 1초씩 도는 로컬 시뮬레이션이다.
   const [opponentElapsed, setOpponentElapsed] = useState(0)
 
@@ -262,13 +164,17 @@ export function StudyTimer({
     setWeeklyMax((maximum) => Math.max(maximum, focusElapsed))
   }, [focusElapsed, onBreak])
 
-  // 배틀 중일 때만 상대 시계가 돈다.
+  // 배틀 중일 때만 상대 시계가 돈다. 3-2-1 카운트다운이 끝나야 비로소 출발한다.
   const inBattle = onResign !== undefined
   useEffect(() => {
-    if (!inBattle) return
+    if (!inBattle || matchStarting) {
+      // 카운트다운 동안엔 0 으로 세워 둔다.
+      if (matchStarting) setOpponentElapsed(0)
+      return
+    }
     const interval = setInterval(() => setOpponentElapsed((value) => value + 1), 1000)
     return () => clearInterval(interval)
-  }, [inBattle])
+  }, [inBattle, matchStarting])
 
   // one 5-minute credit per full hour of focus. Counting crossings rather than
   // `elapsed % 3600 === 0` because the shared timer ticks every 100ms and can
@@ -286,8 +192,8 @@ export function StudyTimer({
   const cycleProgress = (elapsed % CYCLE_SECONDS) / CYCLE_SECONDS
   const skyColors = useMemo(() => skyAt(cycleProgress + SKY_START), [cycleProgress])
   const isDay = !isSkyDark(skyColors[1])
-  const skyText = isDay ? T.ink : '#e8ecf7'
-  const breakLabel = breakBank > 0 ? `${breakBank} MIN BANKED` : 'NO BREAK BANKED'
+  const skyText = isDay ? '#22261C' : '#F1EFE6'
+  const breakLabel = breakBank > 0 ? `${breakBank} minutes banked` : 'No break banked yet'
 
   const endBreak = useCallback(() => {
     setMode('FOCUS')
@@ -386,7 +292,7 @@ export function StudyTimer({
   }
 
   // 항복. 진행 중인 세션은 저장하지 않고 버린 뒤 로비로 돌려보낸다.
-  // 확인창은 OS 기본 Alert 대신 픽셀 모달(PixelConfirm)로 띄운다.
+  // 확인창은 OS 기본 Alert 대신 앱 모달(ConfirmDialog)로 띄운다.
   const giveUp = () => {
     setConfirmResign(false)
     resetFocus()
@@ -411,8 +317,8 @@ export function StudyTimer({
     setMode('SHORT BREAK')
   }
 
-  const name = (profile?.name.trim() || 'GUEST').toUpperCase()
-  const title = (profile?.title || 'USERNAME').toUpperCase()
+  const name = profile?.name.trim() || 'Guest'
+  const title = profile?.title || 'Username'
 
   const time = useMemo(() => formatTime(elapsed), [elapsed])
   const SkyIcon = isDay ? Sun : Moon
@@ -421,7 +327,7 @@ export function StudyTimer({
     <View
       style={[styles.screen, { paddingTop: 4, paddingBottom: 12 }]}
     >
-      <PixelBox shadow={6} boxStyle={styles.frame}>
+      <View style={styles.frame}>
         {/* 헤더 */}
         <View style={styles.header}>
           <View style={styles.headerLeft}>
@@ -434,162 +340,147 @@ export function StudyTimer({
                 <Text style={styles.name} numberOfLines={1}>
                   {name}
                 </Text>
-                <Text style={styles.level}>LVL 04</Text>
+                <Text style={styles.level}>Lv 4</Text>
               </View>
             </View>
           </View>
 
+          {/* 상대 시계는 눌러서 보는 게 아니라 늘 작게 붙어 있다. */}
           {inBattle && (
-            <PixelButton
-              onPress={() => setShowOpponent(true)}
-              color={T.secondary}
-              shadow={3}
-              accessibilityLabel="See the opponent's timer"
-              boxStyle={styles.spyBox}
-            >
-              <Eye size={16} color={T.ink} />
-              <Text style={styles.spyText}>VS</Text>
-            </PixelButton>
+            <View style={styles.rivalChip}>
+              <Text style={styles.rivalLabel}>{OPPONENT.name}</Text>
+              <Text style={styles.rivalTime}>{formatTime(opponentElapsed)}</Text>
+            </View>
           )}
         </View>
 
         {/* 상태 줄 */}
         <View style={styles.statusRow}>
           <View>
-            <Text style={styles.label}>{mode}</Text>
-            <Text style={styles.statusText}>{isRunning ? 'IN SESSION' : 'READY WHEN YOU ARE'}</Text>
+            <Text style={styles.label}>{onBreak ? 'Short break' : 'Focus'}</Text>
+            <Text style={styles.statusText}>
+              {isRunning ? 'In session' : 'Ready when you are'}
+            </Text>
           </View>
-          <PixelBox shadow={0} boxStyle={styles.weeklyBox}>
-            <Text style={[styles.label, { fontSize: 8 }]}>WEEKLY MAX</Text>
+          <Card level={0} tone="alt" radius={RADIUS.md} boxStyle={styles.weeklyBox}>
+            <Text style={styles.weeklyLabel}>Weekly max</Text>
             <Text style={styles.weeklyValue}>{formatWeeklyMax(weeklyMax)}</Text>
-          </PixelBox>
+          </Card>
         </View>
 
         {/* 다이얼 */}
-        <PixelBox
-          shadow={6}
-          style={styles.dialWrap}
-          boxStyle={styles.dial}
-          shadowStyle={styles.dialShadow}
-        >
-          {/* 보간된 3색을 하드스톱 밴드로 펼쳐서 픽셀 밴딩 유지 */}
-          <LinearGradient
-            colors={[
-              skyColors[0], skyColors[0],
-              skyColors[1], skyColors[1],
-              skyColors[2], skyColors[2],
-            ]}
-            locations={[0, 0.34, 0.34, 0.62, 0.62, 1]}
-            style={ABS_FILL}
-          />
-          <View style={styles.dialContent}>
-            <View style={styles.cycleRow}>
-              <SkyIcon size={16} color={skyText} />
-              <Text style={[styles.cycleText, { color: skyText }]}>
-                {isDay ? 'DAY CYCLE' : 'NIGHT CYCLE'}
+        <View style={styles.dialWrap}>
+          <View style={styles.dial}>
+            {/* 세 색을 부드럽게 녹인 하늘. 밴딩 없이 이어진다. */}
+            <LinearGradient
+              colors={skyColors}
+              locations={[0, 0.52, 1]}
+              style={ABS_FILL}
+            />
+            <View style={styles.dialContent}>
+              <View style={styles.cycleRow}>
+                <SkyIcon size={15} color={skyText} />
+                <Text style={[styles.cycleText, { color: skyText }]}>
+                  {isDay ? 'Day cycle' : 'Night cycle'}
+                </Text>
+              </View>
+              <Text style={[styles.time, { color: skyText }]} accessibilityLiveRegion="polite">
+                {time}
+              </Text>
+              <Text style={[styles.cycleSub, { color: skyText }]}>
+                {Math.round(cycleProgress * 100)}% of cycle
               </Text>
             </View>
-            <Text style={[styles.time, { color: skyText }]} accessibilityLiveRegion="polite">
-              {time}
-            </Text>
-            <Text style={[styles.cycleSub, { color: skyText }]}>
-              {Math.round(cycleProgress * 100)}% OF CYCLE
-            </Text>
           </View>
-        </PixelBox>
+        </View>
 
-        <PixelProgress value={cycleProgress} />
+        <View style={styles.progressWrap}>
+          <ProgressBar value={cycleProgress} height={8} />
+        </View>
 
         {/* 컨트롤 */}
         <View style={styles.controls}>
-          <PixelButton onPress={toggleTimer} style={{ flex: 1 }} boxStyle={styles.mainButton}>
+          <Button size="lg" onPress={toggleTimer} style={styles.mainButton}>
             {isRunning ? (
               <Pause size={20} color={T.primaryFg} />
             ) : (
               <Play size={20} color={T.primaryFg} fill={T.primaryFg} />
             )}
-            <Text style={styles.mainButtonText}>{isRunning ? 'PAUSE' : 'START'}</Text>
-          </PixelButton>
-          <PixelButton
+            <Text style={styles.mainButtonText}>{isRunning ? 'Pause' : 'Start'}</Text>
+          </Button>
+          <Button
+            size="lg"
+            variant="soft"
             onPress={handleFinish}
             disabled={!onBreak && (elapsedMs === 0 || isFinishing)}
-            color={T.secondary}
             accessibilityLabel="Finish session and save it"
-            boxStyle={styles.iconButton}
+            style={styles.iconButton}
           >
-            <Check size={20} color={T.ink} />
-          </PixelButton>
-          <PixelButton
+            <Check size={20} color={T.primaryDeep} />
+          </Button>
+          <Button
+            size="lg"
+            variant="outline"
             onPress={reset}
-            color={T.secondary}
             accessibilityLabel="Reset timer"
-            boxStyle={styles.iconButton}
+            style={styles.iconButton}
           >
-            <RotateCcw size={20} color={T.ink} />
-          </PixelButton>
+            <RotateCcw size={20} color={T.inkSoft} />
+          </Button>
         </View>
 
         {onResign && (
-          <PixelButton
+          <Button
+            block
+            variant="ghost"
             onPress={handleResign}
-            color="#6b3f42"
-            shadow={3}
             accessibilityLabel="Resign the match"
             style={styles.resignButton}
-            boxStyle={styles.resignBox}
           >
-            <Flag size={16} color={T.primaryFg} />
-            <Text style={styles.resignText}>RESIGN</Text>
-          </PixelButton>
+            <Flag size={16} color={T.danger} />
+            <Text style={styles.resignText}>Resign</Text>
+          </Button>
         )}
 
         {/* 브레이크 뱅크 */}
-        <PixelBox shadow={0} boxStyle={styles.bankCard}>
+        <Card level={1} style={styles.bankWrap} boxStyle={styles.bankCard}>
           <View style={styles.bankHeader}>
-            <Text style={[styles.label, { color: T.ink }]}>SHORT BREAK BANK</Text>
-            <Text style={styles.bankValue}>{breakBank}M</Text>
+            <Text style={styles.bankTitle}>Short break bank</Text>
+            <Text style={styles.bankValue}>{breakBank} min</Text>
           </View>
           <Text style={styles.bankDesc}>
             1 hour of focus adds 5 minutes. Spend them whenever you need.
           </Text>
           <View style={styles.bankButtons}>
             {[5, 10, 15].map((minutes) => (
-              <PixelButton
+              <Button
                 key={minutes}
-                shadow={2}
-                color={T.bg}
+                variant="outline"
+                size="sm"
                 disabled={breakBank < minutes}
                 onPress={() => useBreak(minutes)}
-                style={{ flex: 1 }}
-                boxStyle={styles.bankButton}
+                style={styles.bankButton}
               >
-                <Text style={styles.bankButtonText}>USE {minutes}M</Text>
-              </PixelButton>
+                Use {minutes}m
+              </Button>
             ))}
           </View>
-          <Text style={[styles.bankStatus, streakBroken && { color: T.primary }]}>
-            {streakBroken ? 'SESSION RECORD BROKEN — NO BREAK WAS BANKED.' : breakLabel}
+          <Text style={[styles.bankStatus, streakBroken && { color: T.danger }]}>
+            {streakBroken ? 'Session record broken — no break was banked.' : breakLabel}
           </Text>
-        </PixelBox>
-      </PixelBox>
+        </Card>
+      </View>
 
-      <OpponentView
-        visible={showOpponent}
-        elapsed={opponentElapsed}
-        yourElapsed={elapsed}
-        onClose={() => setShowOpponent(false)}
-      />
-
-      <PixelConfirm
+      <ConfirmDialog
         visible={confirmResign}
-        title="RESIGN MATCH?"
+        title="Resign match?"
         message={
           elapsedMs > 0
             ? 'You forfeit the battle and this study time will not be saved.'
             : 'You forfeit the battle and go back to the lobby.'
         }
-        confirmLabel="RESIGN"
-        cancelLabel="KEEP STUDYING"
+        confirmLabel="Resign"
+        cancelLabel="Keep studying"
         onConfirm={giveUp}
         onCancel={() => setConfirmResign(false)}
       />
@@ -603,102 +494,92 @@ const styles = StyleSheet.create({
     backgroundColor: T.bg,
     paddingHorizontal: 16,
   },
-  pixelBorder: {
-    borderWidth: 4,
-    borderColor: T.ink,
-    backgroundColor: T.bg,
-  },
-  frame: {
-    padding: 0,
-  },
+  frame: { paddingTop: 4 },
+
   header: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    borderBottomWidth: 4,
-    borderBottomColor: T.ink,
-    paddingHorizontal: 16,
-    paddingVertical: 14,
+    paddingVertical: 10,
   },
   headerLeft: { flexDirection: 'row', alignItems: 'center', gap: 12, flex: 1, marginRight: 10 },
-  spyBox: { height: 40, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, paddingHorizontal: 10 },
-  spyText: { fontFamily: T.fontPixel, fontSize: 8, color: T.ink },
-  label: { fontFamily: T.fontPixel, fontSize: 9, color: T.muted },
-  nameRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 4 },
-  name: { fontFamily: T.fontPixel, fontSize: 13, color: T.ink },
-  level: { fontFamily: T.fontPixel, fontSize: 9, color: T.primary },
+  rivalChip: { alignItems: 'flex-end' },
+  rivalLabel: {
+    fontFamily: T.fontMedium,
+    fontSize: 10,
+    letterSpacing: 0.8,
+    textTransform: 'uppercase',
+    color: T.muted,
+  },
+  rivalTime: { fontFamily: T.fontDisplay, fontSize: 15, color: T.inkSoft, marginTop: 1 },
+  label: {
+    fontFamily: T.fontMedium,
+    fontSize: 11,
+    letterSpacing: 1.1,
+    textTransform: 'uppercase',
+    color: T.muted,
+  },
+  nameRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 2 },
+  name: { fontFamily: T.fontDisplay, fontSize: 19, color: T.ink },
+  level: { fontFamily: T.fontMedium, fontSize: 12, color: T.primaryDeep },
 
   statusRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: 16,
-    paddingTop: 20,
+    paddingTop: 14,
   },
-  statusText: { fontFamily: T.fontPixel, fontSize: 9, color: T.muted, marginTop: 8 },
-  weeklyBox: {
-    backgroundColor: T.secondary,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    alignItems: 'flex-end',
+  statusText: { fontFamily: T.font, fontSize: 14, color: T.muted, marginTop: 3 },
+  weeklyBox: { paddingHorizontal: 14, paddingVertical: 10, alignItems: 'flex-end' },
+  weeklyLabel: {
+    fontFamily: T.fontMedium,
+    fontSize: 10,
+    letterSpacing: 1,
+    textTransform: 'uppercase',
+    color: T.muted,
   },
-  weeklyValue: { fontFamily: T.fontPixel, fontSize: 13, color: T.ink, marginTop: 4 },
+  weeklyValue: { fontFamily: T.fontDisplay, fontSize: 17, color: T.ink, marginTop: 2 },
 
-  dialWrap: { alignSelf: 'center', marginTop: 24 },
+  dialWrap: { alignSelf: 'center', marginTop: 22 },
   dial: {
-    width: 280,
-    height: 280,
-    borderRadius: 140,
+    width: 276,
+    height: 276,
+    borderRadius: 138,
     overflow: 'hidden',
     alignItems: 'center',
     justifyContent: 'center',
+    // 하늘 원반은 테두리 대신 그림자로 떠 있다.
+    shadowColor: '#3B3320',
+    shadowOpacity: 0.16,
+    shadowRadius: 26,
+    shadowOffset: { width: 0, height: 12 },
+    elevation: 6,
   },
-  dialShadow: { borderRadius: 140 },
   dialContent: { alignItems: 'center' },
-  cycleRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 18 },
-  cycleText: { fontFamily: T.fontPixel, fontSize: 9 },
-  time: { fontFamily: T.fontPixel, fontSize: 32, letterSpacing: -2 },
-  cycleSub: { fontFamily: T.fontPixel, fontSize: 8, marginTop: 16, opacity: 0.75 },
+  cycleRow: { flexDirection: 'row', alignItems: 'center', gap: 7, marginBottom: 14 },
+  cycleText: { fontFamily: T.fontMedium, fontSize: 13, letterSpacing: 0.3 },
+  time: { fontFamily: T.fontDisplay, fontSize: 46, letterSpacing: -1 },
+  cycleSub: { fontFamily: T.font, fontSize: 12, marginTop: 12, opacity: 0.8 },
 
-  progressTrack: {
-    height: 12,
-    marginHorizontal: 16,
-    marginTop: 16,
-    borderWidth: 2,
-    borderColor: T.ink,
-    backgroundColor: T.secondary,
-  },
-  progressFill: { height: '100%', backgroundColor: T.primary },
+  progressWrap: { marginTop: 20 },
 
-  controls: { flexDirection: 'row', gap: 8, paddingHorizontal: 16, marginTop: 24 },
-  mainButton: {
-    height: 56,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 12,
-  },
-  mainButtonText: { fontFamily: T.fontPixel, fontSize: 10, color: T.primaryFg },
-  iconButton: { width: 56, height: 56, alignItems: 'center', justifyContent: 'center' },
-  // 마진은 바깥에, 모양은 안쪽 박스에 — 그림자가 여백까지 덮지 않도록.
-  resignButton: { marginHorizontal: 16, marginTop: 10 },
-  resignBox: { height: 46, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 9 },
-  resignText: { fontFamily: T.fontPixel, fontSize: 9, color: T.primaryFg },
+  controls: { flexDirection: 'row', gap: 10, marginTop: 20 },
+  mainButton: { flex: 1, alignSelf: 'stretch' },
+  mainButtonText: { fontFamily: T.fontMedium, fontSize: 17, color: T.primaryFg },
+  iconButton: { width: 56, paddingHorizontal: 0 },
 
-  bankCard: {
-    marginHorizontal: 16,
-    marginTop: 20,
-    marginBottom: 16,
-    padding: 14,
-    backgroundColor: T.secondary,
-  },
+  resignButton: { marginTop: 10 },
+  resignText: { fontFamily: T.fontMedium, fontSize: 15, color: T.danger },
+
+  bankWrap: { marginTop: 20, marginBottom: 16 },
+  bankCard: { padding: 18 },
   bankHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  bankValue: { fontFamily: T.fontPixel, fontSize: 13, color: T.primary },
-  bankDesc: { fontFamily: T.fontPixel, fontSize: 8, lineHeight: 14, color: T.muted, marginTop: 8 },
+  bankTitle: { fontFamily: T.fontMedium, fontSize: 16, color: T.ink },
+  bankValue: { fontFamily: T.fontDisplay, fontSize: 18, color: T.primaryDeep },
+  bankDesc: { fontFamily: T.font, fontSize: 13, lineHeight: 20, color: T.muted, marginTop: 6 },
   bankButtons: { flexDirection: 'row', gap: 8, marginTop: 14 },
-  bankButton: { height: 40, alignItems: 'center', justifyContent: 'center' },
-  bankButtonText: { fontFamily: T.fontPixel, fontSize: 8, color: T.ink },
-  bankStatus: { fontFamily: T.fontPixel, fontSize: 8, color: T.muted, marginTop: 12 },
+  bankButton: { flex: 1, alignSelf: 'stretch', paddingHorizontal: 0 },
+  bankStatus: { fontFamily: T.font, fontSize: 13, color: T.muted, marginTop: 14 },
 })
 
 export default StudyTimer

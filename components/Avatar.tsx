@@ -1,10 +1,13 @@
 import React, { useRef } from 'react';
 import { Image, PanResponder, StyleSheet, Text, View } from 'react-native';
-import { ABS_FILL, BORDER, PixelBox, T } from '@/components/pixel';
+import { ABS_FILL, elevation, T } from '@/components/nova';
 import { clamp01, isImageAvatar, type Profile, type Sticker } from '@/lib/auth';
 
 /** Sticker box as a fraction of the picture. */
 const STICKER_RATIO = 0.28;
+
+/** 아바타 테두리 두께. 스티커는 이 안쪽에 얹힌다. */
+const BORDER = 2;
 
 export type StickerDrag = {
   onMove: (index: number, x: number, y: number) => void;
@@ -91,18 +94,19 @@ function DraggableSticker({
 export function Avatar({
   profile,
   size = 40,
-  shadow = 3,
-  background = T.primary,
+  shadow = 1,
+  background = T.primarySoft,
   drag,
 }: {
   profile?: Profile;
   size?: number;
-  shadow?: number;
+  /** 0–3. 카드 위에 얹을 땐 낮게. */
+  shadow?: 0 | 1 | 2 | 3;
   background?: string;
   /** Supply to make the stickers draggable; omit for a static picture. */
   drag?: StickerDrag;
 }) {
-  const initials = (profile?.name.trim() || 'GUEST').slice(0, 2).toUpperCase();
+  const initials = (profile?.name.trim() || 'Guest').slice(0, 2).toUpperCase();
   // the sticker layer is the box INSIDE the border, so the border comes off first —
   // measuring against the full size pushed every sticker past the edge, and by a
   // bigger fraction the smaller the avatar got.
@@ -111,23 +115,29 @@ export function Avatar({
   const range = inner - stickerSize;
 
   return (
-    <PixelBox
-      shadow={shadow}
-      boxStyle={{
-        width: size,
-        height: size,
-        alignItems: 'center',
-        justifyContent: 'center',
-        backgroundColor: background,
-        borderColor: profile?.frame ?? T.ink,
-      }}
+    <View
+      style={[
+        {
+          width: size,
+          height: size,
+          // 완전한 원이 아니라 살짝 눌린 라운드 사각 — nova 의 아바타 모양.
+          borderRadius: size * 0.34,
+          alignItems: 'center',
+          justifyContent: 'center',
+          backgroundColor: background,
+          borderWidth: BORDER,
+          borderColor: profile?.frame ?? T.border,
+          overflow: 'hidden',
+        },
+        elevation(shadow),
+      ]}
     >
       {isImageAvatar(profile?.avatar) ? (
         <Image source={{ uri: profile!.avatar }} style={styles.image} />
       ) : profile?.avatar ? (
         <Text style={{ fontSize: size * 0.5 }}>{profile.avatar}</Text>
       ) : (
-        <Text style={{ fontFamily: T.fontPixel, fontSize: size * 0.25, color: T.primaryFg }}>
+        <Text style={{ fontFamily: T.fontBold, fontSize: size * 0.34, color: T.primaryDeep }}>
           {initials}
         </Text>
       )}
@@ -147,7 +157,7 @@ export function Avatar({
           )
         )}
       </View>
-    </PixelBox>
+    </View>
   );
 }
 

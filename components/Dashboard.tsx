@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { FlatList, RefreshControl, StyleSheet, Text, View } from 'react-native';
 import StudyGraph from '@/components/StudyGraph';
-import { PixelBox, PixelProgress, T } from '@/components/pixel';
+import { Card, ProgressBar, RADIUS, T } from '@/components/nova';
 import {
   formatDuration,
   getWeekStart,
@@ -93,33 +93,44 @@ export default function Dashboard({ isActive = true, refreshKey = 0 }: Dashboard
   const hasAnySessions = sessions.length > 0;
 
   const renderItem = useCallback(({ item }: { item: StudySession }) => {
-    const subjectLabel = item.subject && item.subject.trim() ? item.subject : 'UNLABELED';
+    const subjectLabel = item.subject && item.subject.trim() ? item.subject : 'Unlabeled';
     const startTimeLabel = formatStartTime(item.startedAt);
 
     return (
-      <PixelBox shadow={3} style={styles.sessionGap} boxStyle={styles.sessionRow}>
+      <Card level={1} style={styles.sessionGap} boxStyle={styles.sessionRow}>
+        <View style={styles.sessionDot} />
         <View style={styles.sessionText}>
           <Text style={styles.sessionSubject} numberOfLines={1}>
-            {subjectLabel.toUpperCase()}
+            {subjectLabel}
           </Text>
           {startTimeLabel ? (
-            <Text style={styles.sessionTime}>STARTED {startTimeLabel.toUpperCase()}</Text>
+            <Text style={styles.sessionTime}>Started {startTimeLabel}</Text>
           ) : null}
         </View>
         <Text style={styles.sessionDuration} numberOfLines={1}>
-          {formatDuration(item.durationMs).toUpperCase()}
+          {formatDuration(item.durationMs)}
         </Text>
-      </PixelBox>
+      </Card>
     );
   }, []);
 
-  const stat = (label: string, ms: number) => (
-    <PixelBox shadow={0} style={styles.statWrap} boxStyle={styles.statBox}>
+  const stat = (label: string, ms: number, highlight = false) => (
+    <Card
+      level={0}
+      tone={highlight ? 'primary' : 'alt'}
+      radius={RADIUS.lg}
+      style={styles.statWrap}
+      boxStyle={styles.statBox}
+    >
       <Text style={styles.statLabel}>{label}</Text>
-      <Text style={styles.statValue} numberOfLines={1} adjustsFontSizeToFit>
-        {formatDuration(ms).toUpperCase()}
+      <Text
+        style={[styles.statValue, highlight && styles.statValueHighlight]}
+        numberOfLines={1}
+        adjustsFontSizeToFit
+      >
+        {formatDuration(ms)}
       </Text>
-    </PixelBox>
+    </Card>
   );
 
   const listHeader = (
@@ -127,72 +138,69 @@ export default function Dashboard({ isActive = true, refreshKey = 0 }: Dashboard
       <View style={styles.headerRow}>
         <View style={styles.headerText}>
           <Text style={styles.title} accessibilityRole="header">
-            STUDY STATS
+            Study stats
           </Text>
-          <Text style={styles.subtitle}>OVERVIEW OF YOUR FOCUSED TIME</Text>
+          <Text style={styles.subtitle}>An overview of your focused time.</Text>
         </View>
       </View>
 
       <View style={styles.statRow}>
-        {stat('TODAY', todayMs)}
-        {stat('WEEK', weekMs)}
-        {stat('MONTH', monthMs)}
+        {stat('Today', todayMs, true)}
+        {stat('Week', weekMs)}
+        {stat('Month', monthMs)}
       </View>
 
       <StudyGraph sessions={sessions} weekStartsOn={settings.weekStartsOn} />
 
       {bestDayMs > 0 ? (
-        <PixelBox shadow={0} boxStyle={styles.progressBox}>
+        <Card level={1} boxStyle={styles.progressBox}>
           <View style={styles.progressHeader}>
             <Text style={styles.sectionTitle} accessibilityRole="header">
-              VS BEST DAY
+              Versus your best day
             </Text>
             <Text style={styles.progressValue}>{progressPercent}%</Text>
           </View>
           <View style={styles.progressBlock}>
-            <PixelProgress value={progressPercent / 100} />
+            <ProgressBar value={progressPercent / 100} />
           </View>
-          <Text style={styles.caption}>
-            BEST THIS WEEK — {formatDuration(bestDayMs).toUpperCase()}
-          </Text>
-        </PixelBox>
+          <Text style={styles.caption}>Best this week — {formatDuration(bestDayMs)}</Text>
+        </Card>
       ) : null}
 
       <View style={styles.sectionHeader}>
         <Text style={styles.sectionTitle} accessibilityRole="header">
-          TODAY'S SESSIONS
+          Today's sessions
         </Text>
         {todaySessions.length > 0 ? (
           <Text style={styles.caption}>
-            {todaySessions.length} {todaySessions.length === 1 ? 'SESSION' : 'SESSIONS'}
+            {todaySessions.length} {todaySessions.length === 1 ? 'session' : 'sessions'}
           </Text>
         ) : null}
       </View>
 
       {!hasAnySessions && (
-        <PixelBox shadow={0} boxStyle={styles.emptyBox}>
+        <Card level={0} tone="alt" boxStyle={styles.emptyBox}>
           <Text style={styles.emptyTitle} accessibilityRole="header">
-            NO STUDY SESSIONS YET
+            No study sessions yet
           </Text>
           <Text style={styles.emptyBody}>
             Finish a session of at least 1 minute and your totals will show up here.
           </Text>
-        </PixelBox>
+        </Card>
       )}
     </View>
   );
 
   const listEmptyComponent = hasAnySessions ? (
-    <PixelBox shadow={0} boxStyle={styles.emptyBox}>
+    <Card level={0} tone="alt" boxStyle={styles.emptyBox}>
       <Text style={styles.emptyBody}>
         No sessions logged today yet. Start one to track today's progress.
       </Text>
-    </PixelBox>
+    </Card>
   ) : null;
 
   return (
     <View style={styles.screen}>
-      <PixelBox shadow={6} style={styles.frameWrap} boxStyle={styles.frame}>
       <FlatList
         data={todaySessions}
         keyExtractor={(item) => item.id}
@@ -201,60 +209,60 @@ export default function Dashboard({ isActive = true, refreshKey = 0 }: Dashboard
         ListEmptyComponent={listEmptyComponent}
         contentContainerStyle={{ paddingBottom: 40 }}
         refreshControl={
-          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={T.ink} />
+          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={T.primary} />
         }
         showsVerticalScrollIndicator={false}
       />
-      </PixelBox>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  screen: { flex: 1, width: '100%', backgroundColor: T.bg, paddingHorizontal: 16, paddingTop: 4 },
-  frameWrap: { flex: 1 },
-  frame: { flex: 1, paddingHorizontal: 14, paddingTop: 14 },
-  header: { gap: 20, paddingBottom: 16 },
+  screen: { flex: 1, width: '100%', backgroundColor: T.bg, paddingHorizontal: 16, paddingTop: 8 },
+  header: { gap: 22, paddingBottom: 14 },
   headerRow: { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12 },
   headerText: { flex: 1 },
-  title: { fontFamily: T.fontPixel, fontSize: 13, color: T.ink },
-  subtitle: { fontFamily: T.fontPixel, fontSize: 8, color: T.muted, marginTop: 10 },
+  title: { fontFamily: T.fontDisplay, fontSize: 28, color: T.ink, letterSpacing: -0.4 },
+  subtitle: { fontFamily: T.font, fontSize: 14, color: T.muted, marginTop: 4 },
 
-  statRow: { flexDirection: 'row', gap: 8 },
+  statRow: { flexDirection: 'row', gap: 10 },
   statWrap: { flex: 1 },
-  statBox: {
-    paddingVertical: 14,
-    paddingHorizontal: 6,
-    alignItems: 'center',
-    backgroundColor: T.secondary,
+  statBox: { paddingVertical: 16, paddingHorizontal: 10, alignItems: 'flex-start' },
+  statLabel: {
+    fontFamily: T.fontMedium,
+    fontSize: 11,
+    letterSpacing: 1,
+    textTransform: 'uppercase',
+    color: T.muted,
   },
-  statLabel: { fontFamily: T.fontPixel, fontSize: 8, color: T.muted },
-  statValue: { fontFamily: T.fontPixel, fontSize: 13, color: T.ink, marginTop: 10 },
+  statValue: { fontFamily: T.fontDisplay, fontSize: 20, color: T.ink, marginTop: 8 },
+  statValueHighlight: { color: T.primaryDeep },
 
-  progressBox: { padding: 14, backgroundColor: T.secondary },
+  progressBox: { padding: 16 },
   progressHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  progressValue: { fontFamily: T.fontPixel, fontSize: 13, color: T.ink },
-  progressBlock: { marginVertical: 12 },
-  caption: { fontFamily: T.fontPixel, fontSize: 8, color: T.muted },
+  progressValue: { fontFamily: T.fontDisplay, fontSize: 20, color: T.primaryDeep },
+  progressBlock: { marginVertical: 14 },
+  caption: { fontFamily: T.font, fontSize: 12, color: T.muted },
 
   sectionHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  sectionTitle: { fontFamily: T.fontPixel, fontSize: 10, color: T.ink },
+  sectionTitle: { fontFamily: T.fontMedium, fontSize: 16, color: T.ink },
 
   sessionRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingVertical: 12,
-    paddingHorizontal: 12,
-    backgroundColor: T.secondary,
+    paddingVertical: 14,
+    paddingHorizontal: 14,
+    gap: 12,
   },
   sessionGap: { marginBottom: 10 },
-  sessionText: { flex: 1, marginRight: 12 },
-  sessionSubject: { fontFamily: T.fontPixel, fontSize: 9, color: T.ink },
-  sessionTime: { fontFamily: T.fontPixel, fontSize: 8, color: T.muted, marginTop: 8 },
-  sessionDuration: { fontFamily: T.fontPixel, fontSize: 9, color: T.ink },
+  sessionDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: T.accent },
+  sessionText: { flex: 1 },
+  sessionSubject: { fontFamily: T.fontMedium, fontSize: 15, color: T.ink },
+  sessionTime: { fontFamily: T.font, fontSize: 12, color: T.muted, marginTop: 3 },
+  sessionDuration: { fontFamily: T.fontDisplay, fontSize: 16, color: T.primaryDeep },
 
-  emptyBox: { padding: 16, backgroundColor: T.secondary },
-  emptyTitle: { fontFamily: T.fontPixel, fontSize: 9, color: T.ink },
-  emptyBody: { fontFamily: T.fontPixel, fontSize: 8, lineHeight: 14, color: T.muted, marginTop: 8 },
+  emptyBox: { padding: 18 },
+  emptyTitle: { fontFamily: T.fontMedium, fontSize: 15, color: T.ink },
+  emptyBody: { fontFamily: T.font, fontSize: 13, lineHeight: 20, color: T.muted, marginTop: 6 },
 });

@@ -2,82 +2,60 @@
 @tailwind components;
 @tailwind utilities;
 
-/* Pixel-arcade theme tokens (shadcn CSS-variable convention).
-   Tweak the hex values here and every component follows. */
+/* nova / secret garden theme tokens (shadcn CSS-variable convention).
+   앰버 + 올리브 그린. 값을 바꾸면 모든 컴포넌트가 따라온다. */
 @layer base {
   :root {
-    --background: 0 0% 3.5%;
-    --foreground: 0 0% 98%;
-    --card: 0 0% 7%;
-    --card-foreground: 0 0% 98%;
-    --popover: 0 0% 7%;
-    --popover-foreground: 0 0% 98%;
-    --primary: 0 0% 98%;
-    --primary-foreground: 0 0% 9%;
-    --secondary: 0 0% 12%;
-    --secondary-foreground: 0 0% 98%;
-    --muted: 0 0% 12%;
-    --muted-foreground: 0 0% 63.9%;
-    --accent: 0 0% 12%;
-    --accent-foreground: 0 0% 98%;
-    --destructive: 0 0% 20%;
-    --destructive-foreground: 0 0% 98%;
-    --border: 0 0% 15%;
-    --input: 0 0% 15%;
-    --ring: 0 0% 83.9%;
-    --radius: 0.5rem;
-
-    /* Hard offset shadow used by every pixel component */
-    --shadow: hsl(24 28% 14%);
+    --background: 43 33% 96%;
+    --foreground: 84 8% 13%;
+    --card: 0 0% 100%;
+    --card-foreground: 84 8% 13%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 84 8% 13%;
+    --primary: 38 61% 44%;
+    --primary-foreground: 45 60% 98%;
+    --secondary: 84 20% 88%;
+    --secondary-foreground: 88 26% 27%;
+    --muted: 45 22% 92%;
+    --muted-foreground: 84 8% 48%;
+    --accent: 88 24% 37%;
+    --accent-foreground: 84 40% 98%;
+    --destructive: 14 55% 41%;
+    --destructive-foreground: 20 60% 98%;
+    --border: 45 24% 86%;
+    --input: 45 24% 86%;
+    --ring: 38 61% 44%;
+    --radius: 0.875rem;
   }
   .dark:root {
-    --background: 0 0% 3.5%;
-    --foreground: 0 0% 98%;
-    --card: 0 0% 7%;
-    --card-foreground: 0 0% 98%;
-    --popover: 0 0% 7%;
-    --popover-foreground: 0 0% 98%;
-    --primary: 0 0% 98%;
-    --primary-foreground: 0 0% 9%;
-    --secondary: 0 0% 12%;
-    --secondary-foreground: 0 0% 98%;
-    --muted: 0 0% 12%;
-    --muted-foreground: 0 0% 63.9%;
-    --accent: 0 0% 12%;
-    --accent-foreground: 0 0% 98%;
-    --destructive: 0 0% 20%;
-    --destructive-foreground: 0 0% 98%;
-    --border: 0 0% 15%;
-    --input: 0 0% 15%;
-    --ring: 0 0% 83.9%;
-    --radius: 0.5rem;
-    --shadow: hsl(24 28% 14%);
+    --background: 43 33% 96%;
+    --foreground: 84 8% 13%;
+    --card: 0 0% 100%;
+    --card-foreground: 84 8% 13%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 84 8% 13%;
+    --primary: 38 61% 44%;
+    --primary-foreground: 45 60% 98%;
+    --secondary: 84 20% 88%;
+    --secondary-foreground: 88 26% 27%;
+    --muted: 45 22% 92%;
+    --muted-foreground: 84 8% 48%;
+    --accent: 88 24% 37%;
+    --accent-foreground: 84 40% 98%;
+    --destructive: 14 55% 41%;
+    --destructive-foreground: 20 60% 98%;
+    --border: 45 24% 86%;
+    --input: 45 24% 86%;
+    --ring: 38 61% 44%;
+    --radius: 0.875rem;
   }
 }
 
-/* Procedural sky phases for the timer dial.
-   Stepped gradients (hard color stops) instead of smooth blends,
-   so the sky reads as pixel-art banding. */
+/* 다이얼 하늘의 웹 폴백. 이제는 밴딩 없이 부드럽게 이어진다. */
 .sky-day {
-  background: linear-gradient(
-    to bottom,
-    #7ec8e3 0%,
-    #7ec8e3 34%,
-    #a3d8ef 34%,
-    #a3d8ef 62%,
-    #cfeaf7 62%,
-    #cfeaf7 100%
-  );
+  background: linear-gradient(to bottom, #BBD2C8 0%, #A6C1AF 52%, #8FAF95 100%);
 }
 
 .sky-night {
-  background: linear-gradient(
-    to bottom,
-    #1b2340 0%,
-    #1b2340 34%,
-    #2a3560 34%,
-    #2a3560 62%,
-    #3d4a80 62%,
-    #3d4a80 100%
-  );
+  background: linear-gradient(to bottom, #262B3D 0%, #1D2130 52%, #151824 100%);
 }

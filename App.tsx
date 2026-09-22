@@ -1,4 +1,10 @@
-import { useFonts, PressStart2P_400Regular } from '@expo-google-fonts/press-start-2p';
+import {
+  useFonts,
+  DMSans_400Regular,
+  DMSans_500Medium,
+  DMSans_700Bold,
+} from '@expo-google-fonts/dm-sans';
+import { Fraunces_600SemiBold } from '@expo-google-fonts/fraunces';
 import { StatusBar } from 'expo-status-bar';
 import React, { useCallback, useEffect, useState } from 'react';
 import { ScrollView, StyleSheet, View } from 'react-native';
@@ -12,10 +18,15 @@ import Settings from './components/Settings';
 import BottomTabs, { type AppTab } from './components/BottomTabs';
 import CountdownOverlay from './components/CountdownOverlay';
 import { Tabs, TabsContent } from './components/ui/tabs';
-import { T } from './components/pixel';
+import { T } from './components/nova';
 
 export default function App() {
-  const [fontsLoaded, fontError] = useFonts({ PressStart2P_400Regular });
+  const [fontsLoaded, fontError] = useFonts({
+    DMSans_400Regular,
+    DMSans_500Medium,
+    DMSans_700Bold,
+    Fraunces_600SemiBold,
+  });
   const [activeTab, setActiveTab] = useState<AppTab>('battle');
   const [battleActive, setBattleActive] = useState(false);
   // 매치 시작 카운트다운. 타이머 화면을 먼저 깔고 그 위에서 3-2-1 을 센다.
@@ -64,6 +75,7 @@ export default function App() {
                 showsVerticalScrollIndicator={false}
               >
                 <StudyTimer
+                  matchStarting={countdown !== null}
                   onFinished={() => {
                     setCountdown(null);
                     setMatchLocked(false);
@@ -119,5 +131,7 @@ const styles = StyleSheet.create({
     backgroundColor: T.bg,
   },
   timerScroll: { flexGrow: 1, justifyContent: 'center', paddingBottom: 16 },
-  tabBar: { alignSelf: 'stretch', maxWidth: 420, width: '100%', marginHorizontal: 'auto' },
+  // marginHorizontal:'auto' 는 RN 네이티브에서 먹지 않아 바가 왼쪽에 붙고 오른쪽이 비었다.
+  // alignSelf 로 가운데 세우고, 넓은 화면에서도 허전하지 않도록 상한을 넉넉히 둔다.
+  tabBar: { alignSelf: 'center', width: '100%', maxWidth: 560 },
 });

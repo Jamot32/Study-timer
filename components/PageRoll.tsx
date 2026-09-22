@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { StyleSheet, Text, View } from 'react-native'
 import Svg, { G, Line, Polygon, Text as SvgText } from 'react-native-svg'
-import { PixelButton, T } from '@/components/pixel'
+import { Button, Card, RADIUS, T } from '@/components/nova'
 import { QUOTES } from '@/components/quotes'
 
 // ============================================================
@@ -56,7 +56,7 @@ const SHELF_LIFT = -10     // 마우스가 올라간 책이 위로 빠져나오�
 type VBox = { x: number; y: number; w: number; h: number }
 type Book = { row: number; x0: number; w: number; h: number; y: number; c: string }
 type Shelf = { L: number; R: number; T: number; B: number; boards: number[]; books: Book[] }
-const BOOK_COLORS = [T.bg, T.muted, T.secondary, T.bg, T.secondary, T.muted, T.bg]
+const BOOK_COLORS = [T.card, T.accentSoft, T.primarySoft, T.cardAlt, T.accent, T.primary, T.bgSunk]
 
 // 꽂힌 책들. 높이와 색을 고정 씨앗으로 흩뿌려 단마다 왼쪽부터 채운다. 책등 너비는 3D 책의
 // 두께 비율(BLOCK/H)로 맞춘다. 그래야 뽑힌 책이 상자로 바뀌어도 책등 폭이 그대로다.
@@ -285,18 +285,18 @@ const ruleWidth = (i: number, r: number) => 0.6 + ((i * 7 + r * 13) % 34) / 100
 // 어느 글이 나올지는 펼친 쪽번호로 정해서, 같은 자리를 다시 펴면 같은 글이 나온다.
 
 const REWARDS = [
-  '10 MIN WALK',
-  'ONE EPISODE',
-  'ICED COFFEE',
-  'A SQUARE OF CHOCOLATE',
-  '15 MIN OF GAMES',
-  'CALL A FRIEND',
-  'FAVORITE SNACK',
-  'A SHORT NAP',
-  'NEW STICKER',
-  'MUSIC BREAK',
-  'STRETCH + WATER',
-  'DOODLE TIME',
+  'A ten-minute walk',
+  'One episode',
+  'Iced coffee',
+  'A square of chocolate',
+  'Fifteen minutes of games',
+  'Call a friend',
+  'Your favorite snack',
+  'A short nap',
+  'A new sticker',
+  'A music break',
+  'Stretch and water',
+  'Doodle time',
 ]
 const REWARD_COUNT = 5
 
@@ -362,14 +362,14 @@ function quoteLines(seed: number): TextLine[] {
 // 오른쪽 쪽: 보상 목록.
 function rewardLines(seed: number): TextLine[] {
   const head: TextLine[] = [
-    { text: '* REWARDS *', size: HEAD_FONT, color: T.primary, align: 'start', glow: true },
+    { text: 'Rewards', size: HEAD_FONT, color: T.primary, align: 'start', glow: true },
     { text: '', size: LIST_FONT, color: T.ink, align: 'start' },
   ]
   return head.concat(
     pickRewards(seed).flatMap((r, i) =>
       // 첫 줄엔 체크칸, 이어지는 줄은 그만큼 들여 쓴다.
       wrap(r, LIST_CHARS - 4).map((t, k) => ({
-        text: (k === 0 ? '[ ] ' : '    ') + t, size: LIST_FONT, color: T.ink, align: 'start' as const,
+        text: (k === 0 ? '\u25a1  ' : '    ') + t, size: LIST_FONT, color: T.ink, align: 'start' as const,
       })),
     ),
   )
@@ -552,7 +552,7 @@ export default function PageRoll({ onFocusChange }: { onFocusChange?: (focused: 
       const b = project(x, H / 2, -thick, tilt, panX)
       return (
         <Line key={side + '-' + s} x1={a.x} y1={a.y} x2={b.x} y2={b.y}
-          stroke={T.ink} strokeWidth={2} opacity={0.55} />
+          stroke={T.borderStrong} strokeWidth={2} opacity={0.7} />
       )
     })
 
@@ -560,7 +560,7 @@ export default function PageRoll({ onFocusChange }: { onFocusChange?: (focused: 
   // 그래야 덮인 책 맨 아래로 뒤표지가 한 겹 삐져나와 보인다.
   const board = (th: number, key: string, zOff: number) => (
     <Polygon key={key} points={quad(th, tilt, panX, BOARD_OUT, zOff, BOARD_PAD)}
-      fill={T.primary} stroke={T.ink} strokeWidth={4} />
+      fill={T.primary} stroke={T.primaryDeep} strokeWidth={2} strokeLinejoin="round" />
   )
 
   // 눕힌 쪽에 글을 찍는다. 책이 완전히 펴진 뒤에만 부른다.
@@ -580,12 +580,12 @@ export default function PageRoll({ onFocusChange }: { onFocusChange?: (focused: 
         <G key={r}>
           {l.glow && (
             // 줄과 같은 발광. 글 뒤에 주황 빛이 번진다.
-            <SvgText x={at.x} y={y} fontFamily={T.fontPixel} fontSize={l.size}
-              fill={T.primary} stroke={T.primary} strokeWidth={6} opacity={0.18} textAnchor={l.align}>
+            <SvgText x={at.x} y={y} fontFamily={T.fontDisplay} fontSize={l.size}
+              fill={T.primary} stroke={T.primary} strokeWidth={5} opacity={0.14} textAnchor={l.align}>
               {l.text}
             </SvgText>
           )}
-          <SvgText x={at.x} y={y} fontFamily={T.fontPixel} fontSize={l.size}
+          <SvgText x={at.x} y={y} fontFamily={T.fontDisplay} fontSize={l.size}
             fill={l.color} textAnchor={l.align}>
             {text}
           </SvgText>
@@ -604,7 +604,8 @@ export default function PageRoll({ onFocusChange }: { onFocusChange?: (focused: 
       <G key={'leaf-' + i} onPress={() => tapSheet(i)}>
         {/* 골라 둔 장은 쪽 전체를 주황으로 칠해 한눈에 띄게 한다. 테두리는 잉크 그대로. */}
         <Polygon points={quad(th, tilt, panX)}
-          fill={marked ? T.primary : T.bg} stroke={T.ink} strokeWidth={4} />
+          fill={marked ? T.primary : T.card} stroke={marked ? T.primaryDeep : T.borderStrong}
+          strokeWidth={2} strokeLinejoin="round" />
         {showText
           ? i === pick!.lo
             ? pageText(th, quoteLines(pick!.a), QUOTE_STEP)
@@ -621,16 +622,16 @@ export default function PageRoll({ onFocusChange }: { onFocusChange?: (focused: 
             // 골라 둔 장은 발광 없이 또렷한 줄. 바탕이 주황이라 밝은 종이색으로 긋는다.
             return (
               <Line key={r} x1={a.x} y1={a.y} x2={b.x} y2={b.y}
-                stroke={T.primaryFg} strokeWidth={4} />
+                stroke={T.primaryFg} strokeWidth={3} strokeLinecap="round" />
             )
           }
           // 고르기 전에는 읽히지 않는다. 두 겹으로 겹쳐 발광처럼 보이게.
           return (
             <G key={r}>
               <Line x1={a.x} y1={a.y} x2={b.x} y2={b.y}
-                stroke={T.primary} strokeWidth={11} opacity={0.16} />
+                stroke={T.primary} strokeWidth={10} opacity={0.14} strokeLinecap="round" />
               <Line x1={a.x} y1={a.y} x2={b.x} y2={b.y}
-                stroke={T.primary} strokeWidth={4} opacity={0.75} />
+                stroke={T.primary} strokeWidth={3} opacity={0.7} strokeLinecap="round" />
             </G>
           )
         })}
@@ -643,7 +644,8 @@ export default function PageRoll({ onFocusChange }: { onFocusChange?: (focused: 
     const left = th < 90
     return (
       <G>
-        <Polygon points={quad(th, tilt, panX)} fill={T.bg} stroke={T.ink} strokeWidth={4} />
+        <Polygon points={quad(th, tilt, panX)} fill={T.card} stroke={T.borderStrong}
+          strokeWidth={2} strokeLinejoin="round" />
         {Array.from({ length: RULES }, (_, r) => {
           const v = 0.1 + r * 0.045
           const len = 0.76 * ruleWidth(SHEETS, r)
@@ -651,7 +653,7 @@ export default function PageRoll({ onFocusChange }: { onFocusChange?: (focused: 
           const b = leafPt(th, left ? 0.88 : 0.12 + len, v, tilt, panX)
           return (
             <Line key={r} x1={a.x} y1={a.y} x2={b.x} y2={b.y}
-              stroke={T.ink} strokeWidth={4} />
+              stroke={T.borderStrong} strokeWidth={2} strokeLinecap="round" />
           )
         })}
       </G>
@@ -660,7 +662,8 @@ export default function PageRoll({ onFocusChange }: { onFocusChange?: (focused: 
 
   const footNode = (side: -1 | 1, thick: number, th: number) => (
     <G key={'foot' + side}>
-      <Polygon points={footQuad(side, thick)} fill={T.bg} stroke={T.ink} strokeWidth={3} />
+      <Polygon points={footQuad(side, thick)} fill={T.cardAlt} stroke={T.borderStrong}
+        strokeWidth={2} strokeLinejoin="round" />
       {footEdges(side, thick)}
       {topSheet(th)}
     </G>
@@ -698,7 +701,7 @@ export default function PageRoll({ onFocusChange }: { onFocusChange?: (focused: 
         <G opacity={1 - morph}>
           <Polygon points={fmt([
             { x: shelf.L, y: shelf.T }, { x: shelf.R, y: shelf.T }, { x: shelf.R, y: shelf.B }, { x: shelf.L, y: shelf.B },
-          ])} fill={T.ink} opacity={0.14} />
+          ])} fill={T.ink} opacity={0.09} />
           {shelf.books.map((bk, i) => {
             if (i === slot) return null
             const bx = bk.x0
@@ -709,11 +712,11 @@ export default function PageRoll({ onFocusChange }: { onFocusChange?: (focused: 
                 <Polygon points={fmt([
                   { x: bx, y: by - bk.h }, { x: bx + bk.w, y: by - bk.h },
                   { x: bx + bk.w, y: by }, { x: bx, y: by },
-                ])} fill={bk.c} stroke={T.ink} strokeWidth={4} />
+                ])} fill={bk.c} stroke={T.borderStrong} strokeWidth={2} strokeLinejoin="round" />
                 {/* 책등의 띠 두 줄 */}
                 {[0.18, 0.3].map((v) => (
                   <Line key={v} x1={bx + 6} y1={by - bk.h * (1 - v)} x2={bx + bk.w - 6} y2={by - bk.h * (1 - v)}
-                    stroke={T.ink} strokeWidth={3} opacity={0.5} />
+                    stroke={T.borderStrong} strokeWidth={2} opacity={0.6} />
                 ))}
               </G>
             )
@@ -721,12 +724,12 @@ export default function PageRoll({ onFocusChange }: { onFocusChange?: (focused: 
           {shelf.boards.map((y) => (
             <Polygon key={'board' + y} points={fmt([
               { x: shelf.L, y }, { x: shelf.R, y }, { x: shelf.R, y: y + BOARD }, { x: shelf.L, y: y + BOARD },
-            ])} fill={T.muted} stroke={T.ink} strokeWidth={4} />
+            ])} fill={T.accentDeep} stroke={T.accentDeep} strokeWidth={2} strokeLinejoin="round" />
           ))}
           {[shelf.L, shelf.R - BOARD].map((x) => (
             <Polygon key={'post' + x} points={fmt([
               { x, y: shelf.T }, { x: x + BOARD, y: shelf.T }, { x: x + BOARD, y: shelf.B }, { x, y: shelf.B },
-            ])} fill={T.muted} stroke={T.ink} strokeWidth={4} />
+            ])} fill={T.accentDeep} stroke={T.accentDeep} strokeWidth={2} strokeLinejoin="round" />
           ))}
         </G>
 
@@ -734,14 +737,15 @@ export default function PageRoll({ onFocusChange }: { onFocusChange?: (focused: 
         <G onPress={() => pullFrom(slot)}>
           {BOX_FACES.filter((fc) => faceVisible(fc.n, view)).map((fc, i) => (
             <Polygon key={'face' + i} points={fmt(fc.pts.map(([x, y, z]) => boxPt(x, y, z, view)))}
-              fill={fc.paper ? T.bg : boxFill} stroke={T.ink} strokeWidth={4} />
+              fill={fc.paper ? T.card : boxFill} stroke={T.borderStrong} strokeWidth={2}
+              strokeLinejoin="round" />
           ))}
           {/* 책등의 띠. 책등 면(x=0) 위 z 방향으로 긋는다. 돌아누우면서 함께 접힌다. */}
           {faceVisible([-1, 0, 0], view) && [0.18, 0.3].map((v) => {
             const y = -H / 2 + H * v
             const a = boxPt(0, y, -BLOCK * 0.18, view)
             const c = boxPt(0, y, -BLOCK * 0.82, view)
-            return <Line key={v} x1={a.x} y1={a.y} x2={c.x} y2={c.y} stroke={T.ink} strokeWidth={3} opacity={0.5} />
+            return <Line key={v} x1={a.x} y1={a.y} x2={c.x} y2={c.y} stroke={T.borderStrong} strokeWidth={2} opacity={0.6} />
           })}
         </G>
       </G>
@@ -823,27 +827,24 @@ export default function PageRoll({ onFocusChange }: { onFocusChange?: (focused: 
         // 책장이 화면을 다 쓰도록 CLOSE 는 무대 위에 띄운다.
         <View style={styles.focusBar} pointerEvents="box-none">
           <Text style={styles.closeText} onPress={reset} accessibilityRole="button"
-            accessibilityLabel="CLOSE THE BOOK">
-            {busy ? '' : '< CLOSE'}
+            accessibilityLabel="Close the book">
+            {busy ? '' : '← Close'}
           </Text>
         </View>
       ) : (
         <>
           <View style={styles.head}>
-            <Text style={styles.title} accessibilityRole="header">PAGE ROLL</Text>
-            <Text style={styles.sub}>ROLL, THEN PICK A BOOK OFF THE SHELF.{'\n'}IT OPENS SOMEWHERE. TAP A LEAF, THEN SELECT.</Text>
+            <Text style={styles.title} accessibilityRole="header">Page roll</Text>
+            <Text style={styles.sub}>
+              Roll, then pick a book off the shelf. It opens somewhere — tap a leaf, then select.
+            </Text>
           </View>
 
-          <View style={styles.metaRow}>
-            <Text style={styles.metaLabel}>TOTAL PAGES</Text>
+          <Card level={0} tone="alt" radius={RADIUS.md} boxStyle={styles.metaRow}>
+            <Text style={styles.metaLabel}>Total pages</Text>
             <Text style={styles.metaValue}>{TOTAL}</Text>
-          </View>
+          </Card>
 
-          <View style={styles.keys}>
-            <PixelButton onPress={roll} disabled={busy} style={styles.grow2} boxStyle={styles.keyBox}>
-              <Text style={styles.keyLabel}>ROLL</Text>
-            </PixelButton>
-          </View>
         </>
       )}
 
@@ -858,18 +859,28 @@ export default function PageRoll({ onFocusChange }: { onFocusChange?: (focused: 
         </Svg>
       </View>
 
-      {/* SELECT/BACK 은 책이 펴진 뒤에만. 그전엔 자리만 비워 둬 책장이 튀지 않게 한다. */}
+      {/* 하단 액션은 늘 한 자리를 지킨다 — 책이 펴졌으면 SELECT/BACK, 아니면 ROLL. */}
       {mode === 'open' || mode === 'flat' ? (
-        <PixelButton
+        <Button
+          size="lg"
+          variant={flat ? 'outline' : 'primary'}
           onPress={toggleFlat}
           disabled={busy || !pick}
-          boxStyle={styles.keyBox}
-          accessibilityLabel={flat ? 'BACK TO THE SHELF' : 'SELECT THESE TWO PAGES'}
+          accessibilityLabel={flat ? 'Back to the shelf' : 'Select these two pages'}
+          style={styles.action}
         >
-          <Text style={styles.keyLabel}>{flat ? 'BACK' : 'SELECT'}</Text>
-        </PixelButton>
-      ) : focused ? null : (
-        <View style={styles.keySpacer} />
+          {flat ? 'Back' : 'Select'}
+        </Button>
+      ) : (
+        <Button
+          size="lg"
+          onPress={roll}
+          disabled={busy || mode !== 'idle'}
+          accessibilityLabel="Roll for a page"
+          style={styles.action}
+        >
+          Roll
+        </Button>
       )}
     </View>
   )
@@ -877,21 +888,42 @@ export default function PageRoll({ onFocusChange }: { onFocusChange?: (focused: 
 
 const styles = StyleSheet.create({
   screen: { flex: 1, width: '100%', backgroundColor: T.bg, paddingHorizontal: 16, paddingTop: 8, paddingBottom: 12 },
-  head: { marginBottom: 16 },
-  title: { fontFamily: T.fontPixel, fontSize: 13, color: T.ink },
-  sub: { fontFamily: T.fontPixel, fontSize: 8, lineHeight: 15, color: T.muted, marginTop: 10 },
+  head: { marginBottom: 16, flexShrink: 0 },
+  title: { fontFamily: T.fontDisplay, fontSize: 28, color: T.ink, letterSpacing: -0.4 },
+  sub: { fontFamily: T.font, fontSize: 14, lineHeight: 21, color: T.muted, marginTop: 6 },
 
-  metaRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 },
-  metaLabel: { fontFamily: T.fontPixel, fontSize: 8, color: T.muted },
-  metaValue: { fontFamily: T.fontPixel, fontSize: 10, color: T.ink },
+  metaRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 11,
+    flexShrink: 0,
+  },
+  metaLabel: {
+    fontFamily: T.fontMedium,
+    fontSize: 11,
+    letterSpacing: 1,
+    textTransform: 'uppercase',
+    color: T.muted,
+  },
+  metaValue: { fontFamily: T.fontDisplay, fontSize: 17, color: T.ink },
 
-  keys: { flexDirection: 'row', gap: 8, marginBottom: 10 },
-  focusBar: { position: 'absolute', top: 8, left: 16, zIndex: 1 },
-  closeText: { fontFamily: T.fontPixel, fontSize: 8, color: T.ink, backgroundColor: T.bg, paddingVertical: 6, paddingHorizontal: 8, alignSelf: 'flex-start' },
-  grow2: { flex: 2 },
-  keyBox: { height: 44, alignItems: 'center', justifyContent: 'center' },
-  keySpacer: { height: 48 },
-  keyLabel: { fontFamily: T.fontPixel, fontSize: 9, color: T.primaryFg },
+  // 하단 액션 버튼. 무대(flex:1)에 밀리지 않게 폭은 화면 전체, 크기는 고정.
+  action: { alignSelf: 'stretch', width: '100%', flexShrink: 0 },
+  focusBar: { position: 'absolute', top: 10, left: 16, zIndex: 1 },
+  closeText: {
+    fontFamily: T.fontMedium,
+    fontSize: 14,
+    color: T.inkSoft,
+    backgroundColor: 'rgba(250,248,242,0.9)',
+    borderRadius: RADIUS.full,
+    paddingVertical: 8,
+    paddingHorizontal: 14,
+    overflow: 'hidden',
+    alignSelf: 'flex-start',
+  },
 
   stage: { flex: 1, marginTop: 8, marginBottom: 12 },
   stageFull: { marginTop: -8, marginBottom: -12, marginHorizontal: -16 },

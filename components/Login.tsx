@@ -1,10 +1,11 @@
 import React, { useState } from 'react';
 import { StyleSheet, Text, TextInput, View } from 'react-native';
-import { PixelBox, PixelButton, T } from '@/components/pixel';
+import { Button, Card, RADIUS, T } from '@/components/nova';
 import { saveProfile, type Profile } from '@/lib/auth';
 
 export default function Login({ onLoggedIn }: { onLoggedIn: (profile: Profile) => void }) {
   const [name, setName] = useState('');
+  const [focused, setFocused] = useState(false);
   const trimmed = name.trim();
 
   const submit = async () => {
@@ -14,64 +15,63 @@ export default function Login({ onLoggedIn }: { onLoggedIn: (profile: Profile) =
 
   return (
     <View style={styles.screen}>
-      <PixelBox shadow={6} style={styles.card} boxStyle={styles.cardBox}>
-        <Text style={styles.title}>STUDY{'\n'}TIMER</Text>
-        <Text style={styles.label}>WHO'S STUDYING?</Text>
-        <TextInput
-          value={name}
-          onChangeText={setName}
-          onSubmitEditing={submit}
-          placeholder="NAME"
-          placeholderTextColor={T.muted}
-          autoFocus
-          maxLength={20}
-          returnKeyType="go"
-          accessibilityLabel="Your name"
-          style={styles.input}
-        />
-        <PixelButton disabled={!trimmed} onPress={submit} style={styles.cta} boxStyle={styles.ctaBox}>
-          <Text style={styles.ctaLabel}>START</Text>
-        </PixelButton>
+      <Card level={2} radius={RADIUS.xl} style={styles.card} boxStyle={styles.cardBox}>
+        <Text style={styles.title}>Study Timer</Text>
+        <Text style={styles.subtitle}>A quiet garden for your focus.</Text>
+
+        <View style={styles.field}>
+          <Text style={styles.label}>Who's studying?</Text>
+          <TextInput
+            value={name}
+            onChangeText={setName}
+            onSubmitEditing={submit}
+            onFocus={() => setFocused(true)}
+            onBlur={() => setFocused(false)}
+            placeholder="Your name"
+            placeholderTextColor={T.muted}
+            autoFocus
+            maxLength={20}
+            returnKeyType="go"
+            accessibilityLabel="Your name"
+            style={[styles.input, focused && styles.inputFocused]}
+          />
+        </View>
+
+        <Button block size="lg" disabled={!trimmed} onPress={submit}>
+          Start
+        </Button>
         {/* PRD P0-1 is guest-first: never wall the timer behind an account. */}
-        <PixelButton
-          shadow={2}
-          color={T.bg}
+        <Button
+          block
+          size="md"
+          variant="ghost"
           onPress={async () => onLoggedIn(await saveProfile({ name: 'Guest' }))}
-          style={styles.cta}
-          boxStyle={styles.guestBox}
         >
-          <Text style={styles.guestLabel}>CONTINUE AS GUEST</Text>
-        </PixelButton>
-      </PixelBox>
+          Continue as guest
+        </Button>
+      </Card>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  screen: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 24 },
-  card: { width: '100%', maxWidth: 360 },
-  cardBox: { padding: 20, gap: 16 },
-  title: {
-    fontFamily: T.fontPixel,
-    fontSize: 20,
-    lineHeight: 30,
-    color: T.ink,
-    textAlign: 'center',
-  },
-  label: { fontFamily: T.fontPixel, fontSize: 9, color: T.muted, textAlign: 'center' },
+  screen: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 24, backgroundColor: T.bg },
+  card: { width: '100%', maxWidth: 380 },
+  cardBox: { padding: 26, gap: 14 },
+  title: { fontFamily: T.fontDisplay, fontSize: 30, color: T.ink, textAlign: 'center', letterSpacing: -0.4 },
+  subtitle: { fontFamily: T.font, fontSize: 14, color: T.muted, textAlign: 'center', marginBottom: 6 },
+  field: { gap: 7, marginBottom: 4 },
+  label: { fontFamily: T.fontMedium, fontSize: 11, letterSpacing: 1.1, textTransform: 'uppercase', color: T.muted },
   input: {
-    fontFamily: T.fontPixel,
-    fontSize: 11,
+    fontFamily: T.font,
+    fontSize: 16,
     color: T.ink,
-    borderWidth: 4,
-    borderColor: T.ink,
-    backgroundColor: T.secondary,
-    paddingHorizontal: 12,
-    paddingVertical: 14,
+    borderWidth: 1,
+    borderColor: T.border,
+    borderRadius: RADIUS.md,
+    backgroundColor: T.cardAlt,
+    paddingHorizontal: 14,
+    paddingVertical: 13,
   },
-  cta: { alignSelf: 'center' },
-  ctaBox: { paddingHorizontal: 24, paddingVertical: 12 },
-  ctaLabel: { fontFamily: T.fontPixel, fontSize: 12, color: T.primaryFg },
-  guestBox: { paddingHorizontal: 16, paddingVertical: 10 },
-  guestLabel: { fontFamily: T.fontPixel, fontSize: 8, color: T.muted },
+  inputFocused: { borderColor: T.primary, backgroundColor: T.card },
 });

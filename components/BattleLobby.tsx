@@ -8,16 +8,9 @@ import {
   View,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
-import {
-  Castle,
-  ChevronRight,
-  Coins,
-  Crown,
-  Swords,
-  Trophy,
-  X,
-} from 'lucide-react-native';
-import { PixelBox, PixelButton, T } from './pixel';
+import { ChevronRight, Coins, Sprout, Swords, Trophy, X } from 'lucide-react-native';
+import Svg, { Circle, Ellipse, Path } from 'react-native-svg';
+import { Button, Card, RADIUS, T, elevation } from './nova';
 import { loadProfile, type Profile } from '../lib/auth';
 
 type BattlePhase = 'lobby' | 'searching' | 'matchFound';
@@ -37,91 +30,132 @@ const TIPS = [
 ];
 
 export const OPPONENT = {
-  name: 'NOVA_MINT',
+  name: 'Nova Mint',
   trophies: 1842,
-  title: 'FOCUS RANGER',
+  title: 'Focus Ranger',
   avatar: '🦊',
 };
 
-function StatPill({ icon: Icon, label, value, color }: {
+function StatPill({
+  icon: Icon,
+  label,
+  value,
+  tone,
+}: {
   icon: typeof Trophy;
   label: string;
   value: string;
-  color: string;
+  tone: 'amber' | 'olive';
 }) {
+  const fg = tone === 'amber' ? T.primaryDeep : T.accentDeep;
+  const bg = tone === 'amber' ? T.primarySoft : T.accentSoft;
   return (
-    <View style={styles.statPill}>
-      <Icon size={14} color={color} strokeWidth={2.8} />
+    <View style={[styles.statPill, { backgroundColor: bg }]}>
+      <Icon size={15} color={fg} strokeWidth={2.2} />
       <View>
         <Text style={styles.statLabel}>{label}</Text>
-        <Text style={[styles.statValue, { color }]}>{value}</Text>
+        <Text style={[styles.statValue, { color: fg }]}>{value}</Text>
       </View>
     </View>
   );
 }
 
-function ProfileStrip({ profile, opponent = false }: { profile: { name: string; trophies: number; title: string; avatar: string }; opponent?: boolean }) {
+function ProfileStrip({
+  profile,
+  tone = 'card',
+}: {
+  profile: { name: string; trophies: number; title: string; avatar: string };
+  tone?: 'card' | 'primary' | 'accent';
+}) {
   return (
-    <View style={[styles.profileStrip, opponent ? styles.opponentStrip : styles.playerStrip]}>
+    <Card level={2} tone={tone} radius={RADIUS.lg} style={styles.stripFrame} boxStyle={styles.profileStrip}>
       <View style={styles.avatarRing}>
         <Text style={styles.avatar}>{profile.avatar}</Text>
       </View>
       <View style={styles.profileCopy}>
         <Text style={styles.profileTitle}>{profile.title}</Text>
-        <Text style={styles.profileName} numberOfLines={1}>{profile.name}</Text>
+        <Text style={styles.profileName} numberOfLines={1}>
+          {profile.name}
+        </Text>
       </View>
       <View style={styles.trophyMini}>
-        <Trophy size={13} color={T.primary} fill={opponent ? T.primary : T.secondary} />
-        <Text style={styles.trophyText}>{profile.trophies}</Text>
+        <Trophy size={14} color={T.primary} strokeWidth={2} />
+        <Text style={styles.trophyText}>{profile.trophies.toLocaleString()}</Text>
       </View>
-    </View>
+    </Card>
   );
 }
 
+/** 대결이 열리는 장소 — 담장 너머의 비밀 정원. 부드러운 언덕과 아치 문. */
 function ArenaArt() {
   return (
-    <PixelBox shadow={4} style={styles.arenaFrame} boxStyle={styles.arenaBorder}>
-      <LinearGradient colors={[T.secondary, T.bg, T.primaryFg]} style={styles.arena}>
-      <View style={[styles.cloud, styles.cloudOne]} />
-      <View style={[styles.cloud, styles.cloudTwo]} />
-      <View style={styles.arenaCrown}>
-        <Crown size={46} color={T.ink} fill={T.primary} strokeWidth={2.5} />
-      </View>
-      <View style={styles.arenaIsland}>
-        <View style={[styles.tower, styles.towerLeft]}><Castle size={24} color={T.primaryFg} fill={T.ink} /></View>
-        <View style={styles.arenaGate}><Swords size={34} color={T.primary} strokeWidth={2.5} /></View>
-        <View style={[styles.tower, styles.towerRight]}><Castle size={24} color={T.primaryFg} fill={T.ink} /></View>
-      </View>
-      <View style={styles.arenaBadge}>
-        <Text style={styles.arenaBadgeText}>ARENA 04</Text>
-        <Text style={styles.arenaName}>STUDY CAFE</Text>
-      </View>
+    <Card level={2} radius={RADIUS.xl} style={styles.arenaFrame} boxStyle={styles.arenaBorder}>
+      <LinearGradient colors={['#F7EFD9', '#FBF8F0', '#EDF0E2']} style={styles.arena}>
+        <Svg width="100%" height="100%" viewBox="0 0 300 220" preserveAspectRatio="xMidYMid slice">
+          {/* 해 */}
+          <Circle cx={232} cy={52} r={26} fill={T.primarySoft} />
+          <Circle cx={232} cy={52} r={15} fill="#E9C87E" />
+          {/* 먼 언덕 */}
+          <Path d="M0 150 Q 70 108 150 142 Q 226 176 300 132 L300 220 L0 220 Z" fill="#DCE3CB" />
+          {/* 가까운 언덕 */}
+          <Path d="M0 178 Q 84 142 168 176 Q 240 204 300 172 L300 220 L0 220 Z" fill={T.accentSoft} />
+          {/* 아치 문 */}
+          <Path
+            d="M110 186 L110 116 Q150 78 190 116 L190 186 Z"
+            fill={T.card}
+            stroke={T.accent}
+            strokeWidth={3}
+            strokeLinejoin="round"
+          />
+          <Path d="M150 186 L150 96" stroke={T.accentSoft} strokeWidth={3} />
+          {/* 덤불 */}
+          <Ellipse cx={62} cy={188} rx={34} ry={20} fill="#C7D3AC" />
+          <Ellipse cx={244} cy={192} rx={30} ry={17} fill="#C7D3AC" />
+        </Svg>
+
+        <View style={styles.arenaBadge}>
+          <Text style={styles.arenaBadgeText}>Garden IV</Text>
+          <Text style={styles.arenaName}>The Study Courtyard</Text>
+        </View>
       </LinearGradient>
-    </PixelBox>
+    </Card>
   );
 }
 
 function SearchOverlay({ elapsed, tip, onCancel }: { elapsed: number; tip: string; onCancel: () => void }) {
   return (
     <View style={styles.overlay}>
-      <View style={styles.searchCard}>
+      <Card level={3} radius={RADIUS.xl} style={styles.searchFrame} boxStyle={styles.searchCard}>
         <ActivityIndicator size="large" color={T.primary} />
-        <Text style={styles.searchEyebrow}>SEARCHING THE ARENA</Text>
+        <Text style={styles.searchEyebrow}>Searching the garden</Text>
         <Text style={styles.searchTime}>00:{elapsed.toString().padStart(2, '0')}</Text>
-        <Text style={styles.searchCopy}>Finding a worthy study rival...</Text>
-        <PixelButton onPress={onCancel} color="#6b3f42" shadow={3} accessibilityLabel="Cancel matchmaking" style={styles.cancelButton} boxStyle={styles.cancelBox}>
-          <View style={styles.cancelContent}><X size={15} color="#fff1e6" /><Text style={styles.cancelText}>CANCEL</Text></View>
-        </PixelButton>
-      </View>
+        <Text style={styles.searchCopy}>Finding a worthy study rival…</Text>
+        <Button
+          variant="outline"
+          onPress={onCancel}
+          accessibilityLabel="Cancel matchmaking"
+          style={styles.cancelButton}
+        >
+          <X size={16} color={T.inkSoft} />
+          <Text style={styles.cancelText}>Cancel</Text>
+        </Button>
+      </Card>
+
       <View style={styles.tipBox}>
-        <Text style={styles.tipLabel}>STUDY TIP</Text>
+        <Text style={styles.tipLabel}>Study tip</Text>
         <Text style={styles.tipText}>{tip}</Text>
       </View>
     </View>
   );
 }
 
-function MatchFoundOverlay({ player, onCountdown }: { player: { name: string; trophies: number; title: string; avatar: string }; onCountdown: () => void }) {
+function MatchFoundOverlay({
+  player,
+  onCountdown,
+}: {
+  player: { name: string; trophies: number; title: string; avatar: string };
+  onCountdown: () => void;
+}) {
   const topY = useRef(new Animated.Value(-220)).current;
   const bottomY = useRef(new Animated.Value(220)).current;
   const badgeScale = useRef(new Animated.Value(0.2)).current;
@@ -138,12 +172,12 @@ function MatchFoundOverlay({ player, onCountdown }: { player: { name: string; tr
 
   return (
     <View style={styles.vsOverlay}>
-      <Animated.View style={[styles.vsHalf, styles.vsRed, { transform: [{ translateY: topY }] }]}>
-        <Text style={styles.vsCaption}>OPPONENT</Text>
-        <ProfileStrip profile={OPPONENT} opponent />
+      <Animated.View style={[styles.vsHalf, styles.vsTop, { transform: [{ translateY: topY }] }]}>
+        <Text style={styles.vsCaption}>Opponent</Text>
+        <ProfileStrip profile={OPPONENT} />
       </Animated.View>
-      <Animated.View style={[styles.vsHalf, styles.vsBlue, { transform: [{ translateY: bottomY }] }]}>
-        <Text style={styles.vsCaption}>YOUR DECK</Text>
+      <Animated.View style={[styles.vsHalf, styles.vsBottom, { transform: [{ translateY: bottomY }] }]}>
+        <Text style={styles.vsCaption}>You</Text>
         <ProfileStrip profile={player} />
       </Animated.View>
       <Animated.View style={[styles.vsBadge, { transform: [{ scale: badgeScale }] }]}>
@@ -157,7 +191,7 @@ export default function BattleLobby({ onMatchStart, onMatchmakingChange }: Battl
   const [phase, setPhase] = useState<BattlePhase>('lobby');
   const [elapsed, setElapsed] = useState(0);
   const [tipIndex, setTipIndex] = useState(0);
-  const [profile, setProfile] = useState<Profile>({ name: 'FOCUS KNIGHT', avatar: '🦉' });
+  const [profile, setProfile] = useState<Profile>({ name: 'Focus Knight', avatar: '🦉' });
 
   useEffect(() => {
     loadProfile().then((saved) => {
@@ -190,112 +224,235 @@ export default function BattleLobby({ onMatchStart, onMatchmakingChange }: Battl
   };
 
   const player = {
-    name: profile.name || 'FOCUS KNIGHT',
+    name: profile.name || 'Focus Knight',
     avatar: profile.avatar || '🦉',
     trophies: 2137,
-    title: profile.title || 'NIGHT SCHOLAR',
+    title: profile.title || 'Night Scholar',
   };
 
   return (
     <View style={styles.screen}>
-      <LinearGradient colors={[T.bg, T.bg, T.secondary]} style={styles.background}>
-        <View style={styles.header}>
-          <View style={styles.playerIdentity}>
-            <View style={styles.headerAvatar}><Text style={styles.headerAvatarText}>{player.avatar}</Text></View>
-            <View>
-              <Text style={styles.levelLabel}>LEVEL 18</Text>
-              <Text style={styles.headerName} numberOfLines={1}>{player.name}</Text>
-            </View>
+      <View style={styles.header}>
+        <View style={styles.playerIdentity}>
+          <View style={styles.headerAvatar}>
+            <Text style={styles.headerAvatarText}>{player.avatar}</Text>
           </View>
-          <View style={styles.headerStats}>
-            <StatPill icon={Trophy} label="TROPHIES" value="2,137" color="#ffe39a" />
-            <StatPill icon={Coins} label="H-COIN" value="480" color="#7fe1ce" />
+          <View style={styles.headerCopy}>
+            <Text style={styles.levelLabel}>Level 18</Text>
+            <Text style={styles.headerName} numberOfLines={1}>
+              {player.name}
+            </Text>
           </View>
         </View>
-
-        <View style={styles.content}>
-          <ArenaArt />
-          <PixelButton onPress={startSearching} color="#e9a72f" shadow={7} accessibilityLabel="Start battle" boxStyle={styles.battleButton}>
-            <View style={styles.battleButtonContent}>
-              <Swords size={28} color={T.primaryFg} fill={T.ink} strokeWidth={2.5} />
-              <View>
-                <Text style={styles.battleText}>BATTLE</Text>
-                <Text style={styles.battleSubtext}>START MATCH</Text>
-              </View>
-              <ChevronRight size={24} color={T.primaryFg} strokeWidth={3} />
-            </View>
-          </PixelButton>
+        <View style={styles.headerStats}>
+          <StatPill icon={Trophy} label="Trophies" value="2,137" tone="amber" />
+          <StatPill icon={Coins} label="Coins" value="480" tone="olive" />
         </View>
+      </View>
 
-        {phase === 'searching' && <SearchOverlay elapsed={elapsed} tip={TIPS[tipIndex]} onCancel={cancelSearching} />}
-        {phase === 'matchFound' && <MatchFoundOverlay player={player} onCountdown={onMatchStart} />}
-      </LinearGradient>
+      <View style={styles.content}>
+        <ArenaArt />
+
+        <Button
+          block
+          size="lg"
+          onPress={startSearching}
+          accessibilityLabel="Start battle"
+          style={styles.battleButton}
+        >
+          <View style={styles.battleButtonContent}>
+            <View style={styles.battleIcon}>
+              <Swords size={22} color={T.primaryFg} strokeWidth={2.2} />
+            </View>
+            <View style={styles.battleCopy}>
+              <Text style={styles.battleText}>Battle</Text>
+              <Text style={styles.battleSubtext}>Find a study rival</Text>
+            </View>
+            <ChevronRight size={22} color={T.primaryFg} strokeWidth={2.4} />
+          </View>
+        </Button>
+
+        <View style={styles.footnote}>
+          <Sprout size={14} color={T.accent} strokeWidth={2} />
+          <Text style={styles.footnoteText}>Every minute you focus grows the garden.</Text>
+        </View>
+      </View>
+
+      {phase === 'searching' && (
+        <SearchOverlay elapsed={elapsed} tip={TIPS[tipIndex]} onCancel={cancelSearching} />
+      )}
+      {phase === 'matchFound' && <MatchFoundOverlay player={player} onCountdown={onMatchStart} />}
     </View>
   );
 }
 
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: T.bg },
-  background: { flex: 1, backgroundColor: T.bg },
-  header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 16, paddingTop: 8, paddingBottom: 10, borderBottomWidth: 2, borderBottomColor: T.ink, backgroundColor: T.bg },
+
+  header: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingTop: 10,
+    paddingBottom: 14,
+  },
   playerIdentity: { flexDirection: 'row', alignItems: 'center', flex: 1, marginRight: 8 },
-  headerAvatar: { width: 46, height: 46, borderRadius: 23, borderWidth: 3, borderColor: T.ink, backgroundColor: T.secondary, alignItems: 'center', justifyContent: 'center', marginRight: 9 },
+  headerAvatar: {
+    width: 46,
+    height: 46,
+    borderRadius: 16,
+    backgroundColor: T.primarySoft,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 10,
+  },
   headerAvatarText: { fontSize: 24 },
-  levelLabel: { fontFamily: T.fontPixel, color: T.muted, fontSize: 7, marginBottom: 5 },
-  headerName: { fontFamily: T.fontPixel, color: T.ink, fontSize: 9, maxWidth: 126 },
+  headerCopy: { flex: 1 },
+  levelLabel: {
+    fontFamily: T.fontMedium,
+    color: T.muted,
+    fontSize: 11,
+    letterSpacing: 0.9,
+    textTransform: 'uppercase',
+  },
+  headerName: { fontFamily: T.fontDisplay, color: T.ink, fontSize: 18, marginTop: 1 },
   headerStats: { flexDirection: 'row', gap: 8 },
-  statPill: { flexDirection: 'row', alignItems: 'center', gap: 5, minWidth: 66 },
-  statLabel: { color: T.muted, fontFamily: T.fontPixel, fontSize: 5, marginBottom: 3 },
-  statValue: { fontFamily: T.fontPixel, fontSize: 8 },
-  content: { flex: 1, paddingHorizontal: 16, justifyContent: 'space-between', paddingTop: 12, paddingBottom: 8 },
-  arenaFrame: { flex: 1, minHeight: 260, maxHeight: 360 },
-  arenaBorder: { flex: 1, borderColor: T.ink, padding: 0, overflow: 'hidden' },
-  arena: { flex: 1, overflow: 'hidden', alignItems: 'center', justifyContent: 'flex-end' },
-  cloud: { position: 'absolute', width: 104, height: 30, borderRadius: 20, backgroundColor: 'rgba(46,34,24,0.08)' },
-  cloudOne: { top: 32, left: 14 },
-  cloudTwo: { top: 72, right: 12, width: 76 },
-  arenaCrown: { position: 'absolute', top: 30, alignItems: 'center', justifyContent: 'center', width: 92, height: 76, borderWidth: 3, borderColor: T.ink, backgroundColor: 'rgba(244,240,230,0.58)' },
-  arenaIsland: { width: '78%', height: '43%', backgroundColor: T.secondary, borderTopWidth: 4, borderColor: T.ink, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-around', marginBottom: 20 },
-  tower: { width: 48, height: 62, borderWidth: 3, borderColor: T.ink, backgroundColor: T.primary, alignItems: 'center', justifyContent: 'center' },
-  towerLeft: { transform: [{ rotate: '-4deg' }] },
-  towerRight: { transform: [{ rotate: '4deg' }] },
-  arenaGate: { width: 74, height: 74, borderRadius: 38, borderWidth: 5, borderColor: T.ink, backgroundColor: T.bg, alignItems: 'center', justifyContent: 'center' },
-  arenaBadge: { position: 'absolute', bottom: 8, backgroundColor: T.ink, borderWidth: 3, borderColor: T.primary, paddingHorizontal: 13, paddingVertical: 7, alignItems: 'center' },
-  arenaBadgeText: { fontFamily: T.fontPixel, color: T.primaryFg, fontSize: 7 },
-  arenaName: { fontFamily: T.fontPixel, color: T.primaryFg, fontSize: 9, marginTop: 4 },
-  battleButton: { borderColor: T.ink, borderWidth: 3, minHeight: 70, alignItems: 'center', justifyContent: 'center' },
-  battleButtonContent: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', width: '100%', paddingHorizontal: 16 },
-  battleText: { fontFamily: T.fontPixel, fontSize: 19, color: T.primaryFg, textShadowColor: T.ink, textShadowOffset: { width: 2, height: 2 }, textShadowRadius: 0 },
-  battleSubtext: { fontFamily: T.fontPixel, fontSize: 6, color: T.ink, marginTop: 5 },
-  overlay: { ...StyleSheet.absoluteFill, backgroundColor: 'rgba(244,240,230,0.96)', alignItems: 'center', justifyContent: 'center', padding: 22 },
-  searchCard: { width: '100%', maxWidth: 350, alignItems: 'center', backgroundColor: T.bg, borderWidth: 4, borderColor: T.ink, padding: 28 },
-  searchEyebrow: { fontFamily: T.fontPixel, color: T.ink, fontSize: 9, marginTop: 22 },
-  searchTime: { fontFamily: T.fontPixel, color: T.primary, fontSize: 28, marginTop: 17 },
-  searchCopy: { fontFamily: T.fontPixel, color: T.muted, fontSize: 7, marginTop: 12 },
-  // 여백은 바깥(Pressable)에 준다. boxStyle 에 margin 을 주면 그림자 사각형이 그 여백까지 덮어
-  // 버튼 위로 삐져나오고, 글자가 눌린 것처럼 보인다.
-  cancelButton: { marginTop: 28 },
-  cancelBox: { borderColor: T.ink, minWidth: 150, alignItems: 'center', justifyContent: 'center' },
-  cancelContent: { flexDirection: 'row', gap: 8, alignItems: 'center', justifyContent: 'center', paddingVertical: 13, paddingHorizontal: 20 },
-  cancelText: { fontFamily: T.fontPixel, fontSize: 8, color: T.primaryFg },
-  tipBox: { position: 'absolute', bottom: 26, left: 22, right: 22, borderTopWidth: 2, borderTopColor: T.ink, paddingTop: 12, alignItems: 'center' },
-  tipLabel: { fontFamily: T.fontPixel, fontSize: 6, color: T.primary },
-  tipText: { fontFamily: T.fontPixel, fontSize: 7, color: T.muted, marginTop: 8, textAlign: 'center' },
+  statPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 7,
+    paddingHorizontal: 10,
+    paddingVertical: 7,
+    borderRadius: RADIUS.md,
+  },
+  statLabel: { color: T.muted, fontFamily: T.font, fontSize: 10 },
+  statValue: { fontFamily: T.fontBold, fontSize: 13 },
+
+  content: { flex: 1, paddingHorizontal: 16, justifyContent: 'space-between', paddingBottom: 10, gap: 16 },
+  arenaFrame: { flex: 1, minHeight: 250, maxHeight: 380 },
+  arenaBorder: { flex: 1, padding: 0 },
+  arena: { flex: 1, justifyContent: 'flex-end' },
+  arenaBadge: {
+    position: 'absolute',
+    bottom: 14,
+    alignSelf: 'center',
+    alignItems: 'center',
+    backgroundColor: 'rgba(255,255,255,0.86)',
+    paddingHorizontal: 16,
+    paddingVertical: 9,
+    borderRadius: RADIUS.full,
+  },
+  arenaBadgeText: {
+    fontFamily: T.fontMedium,
+    color: T.accentDeep,
+    fontSize: 10,
+    letterSpacing: 1.2,
+    textTransform: 'uppercase',
+  },
+  arenaName: { fontFamily: T.fontDisplay, color: T.ink, fontSize: 15, marginTop: 2 },
+
+  battleButton: { height: 70, paddingHorizontal: 0 },
+  battleButtonContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    width: '100%',
+    paddingHorizontal: 18,
+    gap: 14,
+  },
+  battleIcon: {
+    width: 40,
+    height: 40,
+    borderRadius: RADIUS.md,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(255,255,255,0.18)',
+  },
+  battleCopy: { flex: 1 },
+  battleText: { fontFamily: T.fontDisplay, fontSize: 22, color: T.primaryFg },
+  battleSubtext: { fontFamily: T.font, fontSize: 12, color: 'rgba(255,252,244,0.82)', marginTop: 1 },
+
+  footnote: { flexDirection: 'row', alignItems: 'center', gap: 7, justifyContent: 'center' },
+  footnoteText: { fontFamily: T.font, fontSize: 12, color: T.muted },
+
+  overlay: {
+    ...StyleSheet.absoluteFill,
+    backgroundColor: 'rgba(250,248,242,0.97)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 22,
+  },
+  searchFrame: { width: '100%', maxWidth: 350 },
+  searchCard: { alignItems: 'center', padding: 30 },
+  searchEyebrow: {
+    fontFamily: T.fontMedium,
+    color: T.muted,
+    fontSize: 12,
+    letterSpacing: 1.3,
+    textTransform: 'uppercase',
+    marginTop: 22,
+  },
+  searchTime: { fontFamily: T.fontDisplay, color: T.primaryDeep, fontSize: 38, marginTop: 10 },
+  searchCopy: { fontFamily: T.font, color: T.muted, fontSize: 13, marginTop: 8 },
+  cancelButton: { marginTop: 24, alignSelf: 'center' },
+  cancelText: { fontFamily: T.fontMedium, fontSize: 15, color: T.inkSoft },
+  tipBox: { position: 'absolute', bottom: 28, left: 24, right: 24, alignItems: 'center' },
+  tipLabel: {
+    fontFamily: T.fontMedium,
+    fontSize: 10,
+    letterSpacing: 1.3,
+    textTransform: 'uppercase',
+    color: T.accent,
+  },
+  tipText: { fontFamily: T.font, fontSize: 13, color: T.muted, marginTop: 7, textAlign: 'center' },
+
   vsOverlay: { ...StyleSheet.absoluteFill, backgroundColor: T.bg, overflow: 'hidden' },
-  vsHalf: { position: 'absolute', left: 0, right: 0, height: '50%', paddingHorizontal: 18, justifyContent: 'center' },
-  vsRed: { top: 0, backgroundColor: T.primary, alignItems: 'flex-start' },
-  vsBlue: { bottom: 0, backgroundColor: T.secondary, alignItems: 'flex-end' },
-  vsCaption: { fontFamily: T.fontPixel, color: T.ink, fontSize: 7, marginBottom: 10 },
-  profileStrip: { flexDirection: 'row', alignItems: 'center', width: '100%', maxWidth: 310, borderWidth: 3, padding: 10, backgroundColor: T.bg },
-  opponentStrip: { borderColor: T.ink },
-  playerStrip: { borderColor: T.ink },
-  avatarRing: { width: 48, height: 48, borderRadius: 24, backgroundColor: T.secondary, borderWidth: 3, borderColor: T.ink, alignItems: 'center', justifyContent: 'center' },
+  vsHalf: { position: 'absolute', left: 0, right: 0, height: '50%', paddingHorizontal: 20, justifyContent: 'center' },
+  vsTop: { top: 0, backgroundColor: T.primarySoft, alignItems: 'flex-start' },
+  vsBottom: { bottom: 0, backgroundColor: T.accentSoft, alignItems: 'flex-end' },
+  vsCaption: {
+    fontFamily: T.fontMedium,
+    color: T.muted,
+    fontSize: 11,
+    letterSpacing: 1.3,
+    textTransform: 'uppercase',
+    marginBottom: 10,
+  },
+  stripFrame: { width: '100%', maxWidth: 320 },
+  profileStrip: { flexDirection: 'row', alignItems: 'center', padding: 12 },
+  avatarRing: {
+    width: 48,
+    height: 48,
+    borderRadius: 16,
+    backgroundColor: T.bgSunk,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   avatar: { fontSize: 26 },
-  profileCopy: { flex: 1, marginLeft: 10 },
-  profileTitle: { fontFamily: T.fontPixel, color: T.muted, fontSize: 6, marginBottom: 6 },
-  profileName: { fontFamily: T.fontPixel, color: T.ink, fontSize: 9 },
-  trophyMini: { alignItems: 'center', gap: 4 },
-  trophyText: { fontFamily: T.fontPixel, color: T.primary, fontSize: 8 },
-  vsBadge: { position: 'absolute', top: '42%', left: '50%', marginLeft: -48, width: 96, height: 62, borderWidth: 5, borderColor: T.ink, backgroundColor: T.bg, transform: [{ rotate: '-5deg' }], alignItems: 'center', justifyContent: 'center' },
-  vsText: { fontFamily: T.fontPixel, color: T.ink, fontSize: 29, textShadowColor: T.primary, textShadowOffset: { width: 3, height: 3 }, textShadowRadius: 0 },
+  profileCopy: { flex: 1, marginLeft: 12 },
+  profileTitle: {
+    fontFamily: T.fontMedium,
+    color: T.muted,
+    fontSize: 10,
+    letterSpacing: 1,
+    textTransform: 'uppercase',
+  },
+  profileName: { fontFamily: T.fontDisplay, color: T.ink, fontSize: 17, marginTop: 2 },
+  trophyMini: { alignItems: 'center', gap: 3 },
+  trophyText: { fontFamily: T.fontMedium, color: T.primaryDeep, fontSize: 13 },
+  vsBadge: {
+    position: 'absolute',
+    top: '44%',
+    left: '50%',
+    marginLeft: -44,
+    width: 88,
+    height: 60,
+    borderRadius: RADIUS.lg,
+    backgroundColor: T.card,
+    alignItems: 'center',
+    justifyContent: 'center',
+    ...elevation(3),
+  },
+  vsText: { fontFamily: T.fontDisplay, color: T.primaryDeep, fontSize: 28, letterSpacing: 1 },
 });

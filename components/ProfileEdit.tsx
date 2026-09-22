@@ -1,8 +1,8 @@
 import { ArrowLeft } from 'lucide-react-native';
 import React, { useCallback, useState } from 'react';
-import { ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { Avatar, type StickerDrag } from '@/components/Avatar';
-import { PixelBox, PixelButton, T } from '@/components/pixel';
+import { Button, Card, RADIUS, T } from '@/components/nova';
 import {
   AVATARS,
   FRAMES,
@@ -67,77 +67,83 @@ export default function ProfileEdit({ profile, onProfileChanged, onBack }: Profi
       showsVerticalScrollIndicator={false}
       scrollEnabled={!dragging}
     >
-      <PixelBox shadow={6} boxStyle={styles.frame}>
-        <View style={styles.body}>
+      <View style={styles.body}>
           <View style={styles.headerRow}>
-            <View style={styles.headerText}>
-              <Text style={styles.title} accessibilityRole="header">
-                PROFILE
-              </Text>
-              <Text style={styles.subtitle}>{profile.name.toUpperCase()}</Text>
-            </View>
-            <PixelButton
-              shadow={0}
-              color={T.secondary}
+            <Button
+              size="icon"
+              variant="ghost"
               onPress={onBack}
               accessibilityLabel="Back"
-              boxStyle={styles.backBox}
+              style={styles.backBtn}
             >
-              <ArrowLeft size={20} color={T.ink} />
-            </PixelButton>
+              <ArrowLeft size={20} color={T.inkSoft} />
+            </Button>
+            <View style={styles.headerText}>
+              <Text style={styles.title} accessibilityRole="header">
+                Profile
+              </Text>
+              <Text style={styles.subtitle}>{profile.name}</Text>
+            </View>
           </View>
 
           <View style={styles.canvasWrap}>
-            <Avatar profile={profile} size={CANVAS} shadow={6} drag={drag} />
+            <Avatar profile={profile} size={CANVAS} shadow={3} drag={drag} />
           </View>
-          <Text style={styles.hint}>
-            DRAG A STICKER TO MOVE IT. TAP ONE TO REMOVE IT.
-          </Text>
+          <Text style={styles.hint}>Drag a sticker to move it. Tap one to remove it.</Text>
 
-          <Text style={styles.fieldLabel}>PICTURE</Text>
+          <Text style={styles.fieldLabel}>Picture</Text>
           <View style={styles.grid}>
             {AVATARS.map((glyph) => (
-              <PixelButton
+              <Pressable
                 key={glyph}
-                shadow={2}
-                color={profile.avatar === glyph ? T.primary : T.bg}
+                accessibilityRole="button"
                 accessibilityLabel={`Picture ${glyph}`}
                 accessibilityState={{ selected: profile.avatar === glyph }}
                 onPress={() => edit({ avatar: glyph })}
-                boxStyle={styles.cell}
+                style={({ pressed }) => [
+                  styles.cell,
+                  profile.avatar === glyph && styles.cellSelected,
+                  pressed && { opacity: 0.6 },
+                ]}
               >
                 <Text style={styles.cellGlyph}>{glyph}</Text>
-              </PixelButton>
+              </Pressable>
             ))}
           </View>
 
-          <Text style={styles.fieldLabel}>STICKERS</Text>
+          <Text style={styles.fieldLabel}>Stickers</Text>
           <Text style={styles.fieldHint}>
-            TAP TO ADD ({stickers.length}/{MAX_STICKERS}), THEN DRAG IT INTO PLACE.
+            Tap to add ({stickers.length}/{MAX_STICKERS}), then drag it into place.
           </Text>
           <View style={styles.grid}>
-            {STICKERS.map((glyph) => (
-              <PixelButton
-                key={glyph}
-                shadow={2}
-                color={T.bg}
-                disabled={stickers.length >= MAX_STICKERS}
-                accessibilityLabel={`Add sticker ${glyph}`}
-                onPress={() => addSticker(glyph)}
-                boxStyle={styles.cell}
-              >
-                <Text style={styles.cellGlyph}>{glyph}</Text>
-              </PixelButton>
-            ))}
+            {STICKERS.map((glyph) => {
+              const full = stickers.length >= MAX_STICKERS;
+              return (
+                <Pressable
+                  key={glyph}
+                  disabled={full}
+                  accessibilityRole="button"
+                  accessibilityLabel={`Add sticker ${glyph}`}
+                  onPress={() => addSticker(glyph)}
+                  style={({ pressed }) => [
+                    styles.cell,
+                    full && { opacity: 0.35 },
+                    pressed && { opacity: 0.6 },
+                  ]}
+                >
+                  <Text style={styles.cellGlyph}>{glyph}</Text>
+                </Pressable>
+              );
+            })}
           </View>
 
-          <Text style={styles.fieldLabel}>TITLE</Text>
+          <Text style={styles.fieldLabel}>Title</Text>
           <TextInput
             value={title}
             onChangeText={setTitle}
             onBlur={() => edit({ title: title.trim() })}
             onSubmitEditing={() => edit({ title: title.trim() })}
-            placeholder="NIGHT OWL"
+            placeholder="Night owl"
             placeholderTextColor={T.muted}
             maxLength={20}
             returnKeyType="done"
@@ -145,59 +151,84 @@ export default function ProfileEdit({ profile, onProfileChanged, onBack }: Profi
             style={styles.input}
           />
 
-          <Text style={styles.fieldLabel}>OUTER LINE</Text>
+          <Text style={styles.fieldLabel}>Frame color</Text>
           <View style={styles.grid}>
-            {FRAMES.map((frame) => (
-              <PixelButton
-                key={frame.value}
-                shadow={2}
-                color={frame.value}
-                accessibilityLabel={`Outer line ${frame.label}`}
-                accessibilityState={{ selected: (profile.frame ?? T.ink) === frame.value }}
-                onPress={() => edit({ frame: frame.value })}
-                boxStyle={[
-                  styles.cell,
-                  (profile.frame ?? T.ink) === frame.value && styles.cellSelected,
-                ]}
-              >
-                <View />
-              </PixelButton>
-            ))}
+            {FRAMES.map((frame) => {
+              const selected = (profile.frame ?? T.border) === frame.value;
+              return (
+                <Pressable
+                  key={frame.value}
+                  accessibilityRole="button"
+                  accessibilityLabel={`Frame ${frame.label}`}
+                  accessibilityState={{ selected }}
+                  onPress={() => edit({ frame: frame.value })}
+                  style={({ pressed }) => [
+                    styles.swatch,
+                    { backgroundColor: frame.value },
+                    selected && styles.swatchSelected,
+                    pressed && { opacity: 0.6 },
+                  ]}
+                />
+              );
+            })}
           </View>
-        </View>
-      </PixelBox>
+      </View>
     </ScrollView>
   );
 }
 
 const styles = StyleSheet.create({
-  screen: { flex: 1, width: '100%', backgroundColor: T.bg, paddingHorizontal: 16, paddingTop: 4 },
-  frame: { padding: 14 },
-  body: { gap: 4 },
-  headerRow: { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12 },
+  screen: { flex: 1, width: '100%', backgroundColor: T.bg, paddingHorizontal: 16, paddingTop: 8 },
+  body: { gap: 2 },
+  headerRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   headerText: { flex: 1 },
-  backBox: { width: 40, height: 40, alignItems: 'center', justifyContent: 'center' },
-  title: { fontFamily: T.fontPixel, fontSize: 13, color: T.ink },
-  subtitle: { fontFamily: T.fontPixel, fontSize: 8, color: T.muted, marginTop: 10 },
+  backBtn: { marginLeft: -10 },
+  title: { fontFamily: T.fontDisplay, fontSize: 26, color: T.ink, letterSpacing: -0.3 },
+  subtitle: { fontFamily: T.font, fontSize: 14, color: T.muted, marginTop: 2 },
 
-  canvasWrap: { alignItems: 'center', marginTop: 18 },
-  hint: { fontFamily: T.fontPixel, fontSize: 7, lineHeight: 12, color: T.muted, textAlign: 'center', marginTop: 12 },
+  canvasWrap: { alignItems: 'center', marginTop: 20 },
+  hint: { fontFamily: T.font, fontSize: 13, lineHeight: 19, color: T.muted, textAlign: 'center', marginTop: 14 },
 
-  fieldLabel: { fontFamily: T.fontPixel, fontSize: 8, color: T.muted, marginTop: 18 },
-  fieldHint: { fontFamily: T.fontPixel, fontSize: 7, lineHeight: 12, color: T.muted, marginTop: 6 },
-  grid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 10 },
-  cell: { width: 40, height: 40, alignItems: 'center', justifyContent: 'center' },
-  cellSelected: { borderColor: T.primaryFg },
-  cellGlyph: { fontSize: 18, textAlign: 'center' },
+  fieldLabel: {
+    fontFamily: T.fontMedium,
+    fontSize: 11,
+    letterSpacing: 1.1,
+    textTransform: 'uppercase',
+    color: T.muted,
+    marginTop: 22,
+  },
+  fieldHint: { fontFamily: T.font, fontSize: 13, lineHeight: 19, color: T.muted, marginTop: 6 },
+  grid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10, marginTop: 12 },
+  cell: {
+    width: 46,
+    height: 46,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: RADIUS.md,
+    borderWidth: 1,
+    borderColor: T.border,
+    backgroundColor: T.card,
+  },
+  cellSelected: { borderColor: T.primary, backgroundColor: T.primarySoft, borderWidth: 2 },
+  cellGlyph: { fontSize: 22, textAlign: 'center' },
+  swatch: {
+    width: 46,
+    height: 46,
+    borderRadius: RADIUS.full,
+    borderWidth: 2,
+    borderColor: T.border,
+  },
+  swatchSelected: { borderColor: T.ink, borderWidth: 3 },
   input: {
-    fontFamily: T.fontPixel,
-    fontSize: 9,
+    fontFamily: T.font,
+    fontSize: 16,
     color: T.ink,
-    borderWidth: 4,
-    borderColor: T.ink,
-    backgroundColor: T.bg,
-    paddingHorizontal: 10,
-    paddingVertical: 12,
-    marginTop: 10,
+    borderWidth: 1,
+    borderColor: T.border,
+    borderRadius: RADIUS.md,
+    backgroundColor: T.cardAlt,
+    paddingHorizontal: 14,
+    paddingVertical: 13,
+    marginTop: 12,
   },
 });
