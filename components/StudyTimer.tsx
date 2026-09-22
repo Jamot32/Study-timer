@@ -1,12 +1,14 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Alert, AppState, Pressable, StyleSheet, Text, View, type StyleProp, type ViewStyle } from 'react-native'
 import { LinearGradient } from 'expo-linear-gradient'
-import { Check, Moon, Pause, Play, RotateCcw, Sun } from 'lucide-react-native'
+import { Check, Eye, Flag, Moon, Pause, Play, RotateCcw, Sun } from 'lucide-react-native'
 import { confirmDestructive } from '../lib/confirm'
 import { useStudyTimer } from '../lib/useStudyTimer'
 import { awayOutcome } from '../lib/away'
 import { type Profile } from '../lib/auth'
 import { Avatar } from './Avatar'
+import PixelConfirm from './PixelConfirm'
+import OpponentView from './OpponentView'
 
 // ============================================================
 // PIXEL STUDY TIMER — React Native (Expo)
@@ -219,10 +221,13 @@ function PixelProgress({ value }: { value: number }) {
 export function StudyTimer({
   onFinished,
   onOpenProfile,
+  onResign,
   profile,
 }: {
   onFinished?: () => void
   onOpenProfile?: () => void
+  /** Give up the match: drops the session unsaved and hands the screen back. */
+  onResign?: () => void
   /** Logged-in profile; drives the header avatar, outer line, title and name. */
   profile?: Profile
 }) {
@@ -232,6 +237,10 @@ export function StudyTimer({
   const [weeklyMax, setWeeklyMax] = useState(0)
   const [breakElapsed, setBreakElapsed] = useState(0)
   const [isFinishing, setIsFinishing] = useState(false)
+  const [confirmResign, setConfirmResign] = useState(false)
+  const [showOpponent, setShowOpponent] = useState(false)
+  // 상대 타이머. 서버가 없으니 매치가 걸린 동안 1초씩 도는 로컬 시뮬레이션이다.
+  const [opponentElapsed, setOpponentElapsed] = useState(0)
 
   // FOCUS runs on the shared timer so finished sessions actually reach the
   // dashboard; SHORT BREAK runs on its own counter so break time is never
@@ -252,6 +261,14 @@ export function StudyTimer({
     if (onBreak) return
     setWeeklyMax((maximum) => Math.max(maximum, focusElapsed))
   }, [focusElapsed, onBreak])
+
+  // 배틀 중일 때만 상대 시계가 돈다.
+  const inBattle = onResign !== undefined
+  useEffect(() => {
+    if (!inBattle) return
+    const interval = setInterval(() => setOpponentElapsed((value) => value + 1), 1000)
+    return () => clearInterval(interval)
+  }, [inBattle])
 
   // one 5-minute credit per full hour of focus. Counting crossings rather than
   // `elapsed % 3600 === 0` because the shared timer ticks every 100ms and can
@@ -368,6 +385,22 @@ export function StudyTimer({
     }
   }
 
+  // 항복. 진행 중인 세션은 저장하지 않고 버린 뒤 로비로 돌려보낸다.
+  // 확인창은 OS 기본 Alert 대신 픽셀 모달(PixelConfirm)로 띄운다.
+  const giveUp = () => {
+    setConfirmResign(false)
+    resetFocus()
+    earnedHours.current = 0
+    setStreakBroken(false)
+    setBreakElapsed(0)
+    setMode('FOCUS')
+    setOpponentElapsed(0)
+    onResign?.()
+  }
+
+  // 시간이 0이어도 묻는다 — 항복은 눌렀다고 바로 나가 버리면 안 되는 동작.
+  const handleResign = () => setConfirmResign(true)
+
   const useBreak = (minutes: number) => {
     if (breakBank < minutes) return
     // pause rather than reset: the focus time accumulated so far must survive
@@ -405,6 +438,19 @@ export function StudyTimer({
               </View>
             </View>
           </View>
+
+          {inBattle && (
+            <PixelButton
+              onPress={() => setShowOpponent(true)}
+              color={T.secondary}
+              shadow={3}
+              accessibilityLabel="See the opponent's timer"
+              boxStyle={styles.spyBox}
+            >
+              <Eye size={16} color={T.ink} />
+              <Text style={styles.spyText}>VS</Text>
+            </PixelButton>
+          )}
         </View>
 
         {/* 상태 줄 */}
@@ -483,6 +529,20 @@ export function StudyTimer({
           </PixelButton>
         </View>
 
+        {onResign && (
+          <PixelButton
+            onPress={handleResign}
+            color="#6b3f42"
+            shadow={3}
+            accessibilityLabel="Resign the match"
+            style={styles.resignButton}
+            boxStyle={styles.resignBox}
+          >
+            <Flag size={16} color={T.primaryFg} />
+            <Text style={styles.resignText}>RESIGN</Text>
+          </PixelButton>
+        )}
+
         {/* 브레이크 뱅크 */}
         <PixelBox shadow={0} boxStyle={styles.bankCard}>
           <View style={styles.bankHeader}>
@@ -512,6 +572,27 @@ export function StudyTimer({
           </Text>
         </PixelBox>
       </PixelBox>
+
+      <OpponentView
+        visible={showOpponent}
+        elapsed={opponentElapsed}
+        yourElapsed={elapsed}
+        onClose={() => setShowOpponent(false)}
+      />
+
+      <PixelConfirm
+        visible={confirmResign}
+        title="RESIGN MATCH?"
+        message={
+          elapsedMs > 0
+            ? 'You forfeit the battle and this study time will not be saved.'
+            : 'You forfeit the battle and go back to the lobby.'
+        }
+        confirmLabel="RESIGN"
+        cancelLabel="KEEP STUDYING"
+        onConfirm={giveUp}
+        onCancel={() => setConfirmResign(false)}
+      />
     </View>
   )
 }
@@ -539,7 +620,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 14,
   },
-  headerLeft: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  headerLeft: { flexDirection: 'row', alignItems: 'center', gap: 12, flex: 1, marginRight: 10 },
+  spyBox: { height: 40, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, paddingHorizontal: 10 },
+  spyText: { fontFamily: T.fontPixel, fontSize: 8, color: T.ink },
   label: { fontFamily: T.fontPixel, fontSize: 9, color: T.muted },
   nameRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 4 },
   name: { fontFamily: T.fontPixel, fontSize: 13, color: T.ink },
@@ -597,6 +680,10 @@ const styles = StyleSheet.create({
   },
   mainButtonText: { fontFamily: T.fontPixel, fontSize: 10, color: T.primaryFg },
   iconButton: { width: 56, height: 56, alignItems: 'center', justifyContent: 'center' },
+  // 마진은 바깥에, 모양은 안쪽 박스에 — 그림자가 여백까지 덮지 않도록.
+  resignButton: { marginHorizontal: 16, marginTop: 10 },
+  resignBox: { height: 46, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 9 },
+  resignText: { fontFamily: T.fontPixel, fontSize: 9, color: T.primaryFg },
 
   bankCard: {
     marginHorizontal: 16,
