@@ -1,15 +1,40 @@
 import React, { useState } from 'react';
-import { StyleSheet, Text, TextInput, View } from 'react-native';
+import { StyleSheet, Text, View } from 'react-native';
 import { PixelBox, PixelButton, T } from '@/components/pixel';
-import { saveProfile, type Profile } from '@/lib/auth';
+import { AuthError, googleSheetAuth, type AuthSession } from '@/lib/auth';
+import { saveProfile, type Profile } from '@/lib/profile';
 
-export default function Login({ onLoggedIn }: { onLoggedIn: (profile: Profile) => void }) {
-  const [name, setName] = useState('');
-  const trimmed = name.trim();
+type LoginProps = {
+  onLoggedIn: (profile: Profile, session: AuthSession | null) => void;
+};
 
-  const submit = async () => {
-    if (!trimmed) return;
-    onLoggedIn(await saveProfile({ name: trimmed }));
+export default function Login({ onLoggedIn }: LoginProps) {
+  const [isSigningIn, setIsSigningIn] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const signInWithGoogle = async () => {
+    if (isSigningIn) return;
+    setIsSigningIn(true);
+    setError(null);
+    try {
+      const session = await googleSheetAuth.signInWithGoogle();
+      if (!session) return;
+      const profile = await saveProfile({
+        name: session.user.displayName,
+        avatar: session.user.avatar,
+      });
+      onLoggedIn(profile, session);
+    } catch (cause) {
+      setError(
+        cause instanceof AuthError ? cause.message : 'Google login failed. Please try again.'
+      );
+    } finally {
+      setIsSigningIn(false);
+    }
+  };
+
+  const continueAsGuest = async () => {
+    onLoggedIn(await saveProfile({ name: 'Guest' }), null);
   };
 
   return (
@@ -17,26 +42,24 @@ export default function Login({ onLoggedIn }: { onLoggedIn: (profile: Profile) =
       <PixelBox shadow={6} style={styles.card} boxStyle={styles.cardBox}>
         <Text style={styles.title}>STUDY{'\n'}TIMER</Text>
         <Text style={styles.label}>WHO'S STUDYING?</Text>
-        <TextInput
-          value={name}
-          onChangeText={setName}
-          onSubmitEditing={submit}
-          placeholder="NAME"
-          placeholderTextColor={T.muted}
-          autoFocus
-          maxLength={20}
-          returnKeyType="go"
-          accessibilityLabel="Your name"
-          style={styles.input}
-        />
-        <PixelButton disabled={!trimmed} onPress={submit} style={styles.cta} boxStyle={styles.ctaBox}>
-          <Text style={styles.ctaLabel}>START</Text>
+        <Text style={styles.description}>
+          SIGN IN WITH AN APPROVED GOOGLE ACCOUNT, OR KEEP STUDYING AS A GUEST.
+        </Text>
+        <PixelButton
+          disabled={isSigningIn}
+          onPress={signInWithGoogle}
+          style={styles.cta}
+          boxStyle={styles.ctaBox}
+        >
+          <Text style={styles.ctaLabel}>
+            {isSigningIn ? 'CHECKING...' : 'SIGN IN WITH GOOGLE'}
+          </Text>
         </PixelButton>
-        {/* PRD P0-1 is guest-first: never wall the timer behind an account. */}
+        {error ? <Text style={styles.error}>{error.toUpperCase()}</Text> : null}
         <PixelButton
           shadow={2}
           color={T.bg}
-          onPress={async () => onLoggedIn(await saveProfile({ name: 'Guest' }))}
+          onPress={continueAsGuest}
           style={styles.cta}
           boxStyle={styles.guestBox}
         >
@@ -59,15 +82,19 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   label: { fontFamily: T.fontPixel, fontSize: 9, color: T.muted, textAlign: 'center' },
-  input: {
+  description: {
     fontFamily: T.fontPixel,
-    fontSize: 11,
-    color: T.ink,
-    borderWidth: 4,
-    borderColor: T.ink,
-    backgroundColor: T.secondary,
-    paddingHorizontal: 12,
-    paddingVertical: 14,
+    fontSize: 7,
+    lineHeight: 13,
+    color: T.muted,
+    textAlign: 'center',
+  },
+  error: {
+    fontFamily: T.fontPixel,
+    fontSize: 7,
+    lineHeight: 13,
+    color: T.primary,
+    textAlign: 'center',
   },
   cta: { alignSelf: 'center' },
   ctaBox: { paddingHorizontal: 24, paddingVertical: 12 },

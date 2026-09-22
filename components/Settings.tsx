@@ -3,7 +3,8 @@ import React, { useCallback, useEffect, useState } from 'react';
 import { ScrollView, StyleSheet, Text, View } from 'react-native';
 import { PixelBox, PixelButton, T } from '@/components/pixel';
 import { confirmDestructive } from '@/lib/confirm';
-import { clearProfile, type Profile } from '@/lib/auth';
+import type { AuthSession } from '@/lib/auth';
+import type { Profile } from '@/lib/profile';
 import { Avatar } from '@/components/Avatar';
 import { clearSessions } from '@/lib/sessions';
 import { loadSettings, saveSettings, type Settings as SettingsValue } from '@/lib/settings';
@@ -54,18 +55,21 @@ export interface SettingsProps {
   onChanged?: () => void;
   /** Back to the timer. */
   onBack?: () => void;
-  /** The signed-in (local) profile. */
+  /** The device-local profile, available for both guests and signed-in users. */
   profile?: Profile;
+  /** Present only when Google and the sheet allowlist approved the user. */
+  authSession?: AuthSession | null;
   /** Opens the profile editor. */
   onEditProfile?: () => void;
-  /** Called after the profile is cleared. */
-  onSignOut?: () => void;
+  /** Clears the account session and local profile. */
+  onSignOut?: () => Promise<void> | void;
 }
 
 export default function Settings({
   onChanged,
   onBack,
   profile,
+  authSession,
   onEditProfile,
   onSignOut,
 }: SettingsProps) {
@@ -97,8 +101,7 @@ export default function Settings({
   }, [onChanged]);
 
   const handleSignOut = useCallback(async () => {
-    await clearProfile();
-    onSignOut?.();
+    await onSignOut?.();
   }, [onSignOut]);
 
   if (!settings) return null;
@@ -147,7 +150,10 @@ export default function Settings({
               PROFILE
             </Text>
             <Text style={styles.cardDesc}>
-              SIGNED IN AS {profile.name.toUpperCase()}. THIS DEVICE ONLY — NOTHING IS SYNCED YET.
+              {authSession
+                ? `GOOGLE: ${authSession.user.email.toUpperCase()} · ${authSession.user.role.toUpperCase()}`
+                : 'GUEST PROFILE · NO GOOGLE ACCOUNT CONNECTED'}
+              {'\n'}STUDY HISTORY IS STILL STORED ON THIS DEVICE ONLY.
             </Text>
 
             <View style={styles.previewRow}>
@@ -179,7 +185,9 @@ export default function Settings({
               style={styles.clearWrap}
               boxStyle={styles.clearBox}
             >
-              <Text style={styles.clearLabel}>SIGN OUT</Text>
+              <Text style={styles.clearLabel}>
+                {authSession ? 'SIGN OUT' : 'CHANGE USER'}
+              </Text>
             </PixelButton>
           </PixelBox>
         ) : null}

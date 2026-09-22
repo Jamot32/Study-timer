@@ -5,7 +5,7 @@ import { BarChart3, Check, Moon, Pause, Play, RotateCcw, Settings2, Sun } from '
 import { confirmDestructive } from '../lib/confirm'
 import { useStudyTimer } from '../lib/useStudyTimer'
 import { awayOutcome } from '../lib/away'
-import { type Profile } from '../lib/auth'
+import { type Profile } from '../lib/profile'
 import { Avatar } from './Avatar'
 
 // ============================================================

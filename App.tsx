@@ -9,7 +9,8 @@ import Settings from './components/Settings';
 import ProfileEdit from './components/ProfileEdit';
 import Login from './components/Login';
 import Loading from './components/Loading';
-import { loadProfile, type Profile } from './lib/auth';
+import { clearProfile, loadProfile, saveProfile, type Profile } from './lib/profile';
+import { googleSheetAuth, type AuthSession } from './lib/auth';
 import { T } from './components/pixel';
 
 type Screen = 'timer' | 'dashboard' | 'settings' | 'profile';
@@ -18,11 +19,28 @@ export default function App() {
   const [fontsLoaded, fontError] = useFonts({ PressStart2P_400Regular });
   const [screen, setScreen] = useState<Screen>('timer');
   const [refreshKey, setRefreshKey] = useState(0);
-  // undefined = still checking storage, null = logged out
+  // undefined = still checking storage, null = no local profile yet
   const [profile, setProfile] = useState<Profile | null | undefined>(undefined);
+  const [authSession, setAuthSession] = useState<AuthSession | null>(null);
 
   useEffect(() => {
-    loadProfile().then(setProfile);
+    void Promise.all([loadProfile(), googleSheetAuth.restoreSession()]).then(
+      async ([storedProfile, restoredSession]) => {
+        setAuthSession(restoredSession);
+        if (storedProfile) {
+          setProfile(storedProfile);
+        } else if (restoredSession) {
+          setProfile(
+            await saveProfile({
+              name: restoredSession.user.displayName,
+              avatar: restoredSession.user.avatar,
+            })
+          );
+        } else {
+          setProfile(null);
+        }
+      }
+    );
   }, []);
 
   // after every hook — an early return above them breaks hook order on load.
@@ -34,7 +52,14 @@ export default function App() {
   return (
     <SafeAreaProvider>
       <SafeAreaView style={styles.safeArea} edges={['top', 'left', 'right', 'bottom']}>
-        {!profile && <Login onLoggedIn={setProfile} />}
+        {!profile && (
+          <Login
+            onLoggedIn={(nextProfile, session) => {
+              setProfile(nextProfile);
+              setAuthSession(session);
+            }}
+          />
+        )}
 
         {/* The timer stays mounted while stats/config are open — unmounting it
             would throw away the running session. */}
@@ -67,8 +92,12 @@ export default function App() {
               onChanged={() => setRefreshKey((k) => k + 1)}
               onBack={backToTimer}
               profile={profile}
+              authSession={authSession}
               onEditProfile={() => setScreen('profile')}
-              onSignOut={() => {
+              onSignOut={async () => {
+                await googleSheetAuth.signOut();
+                await clearProfile();
+                setAuthSession(null);
                 setProfile(null);
                 setScreen('timer');
               }}
