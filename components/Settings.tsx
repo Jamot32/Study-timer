@@ -2,7 +2,8 @@ import React, { useCallback, useEffect, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { Button, Card, RADIUS, T } from '@/components/nova';
 import { confirmDestructive } from '@/lib/confirm';
-import { clearProfile, type Profile } from '@/lib/auth';
+import type { AuthSession } from '@/lib/auth';
+import type { Profile } from '@/lib/profile';
 import { Avatar } from '@/components/Avatar';
 import { clearSessions } from '@/lib/sessions';
 import { loadSettings, saveSettings, type Settings as SettingsValue } from '@/lib/settings';
@@ -53,18 +54,20 @@ function Segmented<T_ extends string | number>({
 export interface SettingsProps {
   /** Called after a change that the dashboard's numbers depend on. */
   onChanged?: () => void;
-  /** Back to the timer. */
-  /** The signed-in (local) profile. */
+  /** The device-local profile, for both guests and Google users. */
   profile?: Profile;
+  /** Present only when Google and the sheet allowlist approved the user. */
+  authSession?: AuthSession | null;
   /** Opens the profile editor. */
   onEditProfile?: () => void;
-  /** Called after the profile is cleared. */
-  onSignOut?: () => void;
+  /** Clears the Google session and the local profile. */
+  onSignOut?: () => Promise<void> | void;
 }
 
 export default function Settings({
   onChanged,
   profile,
+  authSession,
   onEditProfile,
   onSignOut,
 }: SettingsProps) {
@@ -96,8 +99,7 @@ export default function Settings({
   }, [onChanged]);
 
   const handleSignOut = useCallback(async () => {
-    await clearProfile();
-    onSignOut?.();
+    await onSignOut?.();
   }, [onSignOut]);
 
   if (!settings) return null;
@@ -134,7 +136,10 @@ export default function Settings({
               Profile
             </Text>
             <Text style={styles.cardDesc}>
-              Signed in as {profile.name}. This device only — nothing is synced yet.
+              {authSession
+                ? `Signed in with Google as ${authSession.user.email} (${authSession.user.role}).`
+                : `Using ${profile.name} as a local profile — no Google account connected.`}{' '}
+              Study history stays on this device.
             </Text>
 
             <View style={styles.previewRow}>
@@ -153,7 +158,7 @@ export default function Settings({
               Edit profile
             </Button>
             <Button block variant="outline" onPress={handleSignOut} style={styles.actionGap}>
-              Sign out
+              {authSession ? 'Sign out' : 'Change user'}
             </Button>
           </Card>
         ) : null}

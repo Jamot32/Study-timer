@@ -1,16 +1,45 @@
 import React, { useState } from 'react';
 import { StyleSheet, Text, TextInput, View } from 'react-native';
 import { Button, Card, RADIUS, T } from '@/components/nova';
-import { saveProfile, type Profile } from '@/lib/auth';
+import GoogleSignInButton from '@/components/GoogleSignInButton';
+import { AuthError, googleSheetAuth, type AuthSession } from '@/lib/auth';
+import { saveProfile, type Profile } from '@/lib/profile';
 
-export default function Login({ onLoggedIn }: { onLoggedIn: (profile: Profile) => void }) {
+type LoginProps = {
+  onLoggedIn: (profile: Profile, session: AuthSession | null) => void;
+};
+
+export default function Login({ onLoggedIn }: LoginProps) {
   const [name, setName] = useState('');
   const [focused, setFocused] = useState(false);
+  const [checking, setChecking] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const trimmed = name.trim();
 
   const submit = async () => {
     if (!trimmed) return;
-    onLoggedIn(await saveProfile({ name: trimmed }));
+    onLoggedIn(await saveProfile({ name: trimmed }), null);
+  };
+
+  const showError = (cause: unknown) =>
+    setError(cause instanceof AuthError ? cause.message : 'Google login failed. Please try again.');
+
+  const signInWithIdToken = async (idToken: string) => {
+    if (checking) return;
+    setChecking(true);
+    setError(null);
+    try {
+      const session = await googleSheetAuth.signInWithIdToken(idToken);
+      const profile = await saveProfile({
+        name: session.user.displayName,
+        avatar: session.user.avatar,
+      });
+      onLoggedIn(profile, session);
+    } catch (cause) {
+      showError(cause);
+    } finally {
+      setChecking(false);
+    }
   };
 
   return (
@@ -18,6 +47,19 @@ export default function Login({ onLoggedIn }: { onLoggedIn: (profile: Profile) =
       <Card level={2} radius={RADIUS.xl} style={styles.card} boxStyle={styles.cardBox}>
         <Text style={styles.title}>Study Timer</Text>
         <Text style={styles.subtitle}>A quiet garden for your focus.</Text>
+
+        <GoogleSignInButton busy={checking} onIdToken={signInWithIdToken} onError={showError} />
+        {error ? (
+          <Text style={styles.error} accessibilityRole="alert">
+            {error}
+          </Text>
+        ) : null}
+
+        <View style={styles.divider}>
+          <View style={styles.rule} />
+          <Text style={styles.or}>or</Text>
+          <View style={styles.rule} />
+        </View>
 
         <View style={styles.field}>
           <Text style={styles.label}>Who's studying?</Text>
@@ -29,7 +71,6 @@ export default function Login({ onLoggedIn }: { onLoggedIn: (profile: Profile) =
             onBlur={() => setFocused(false)}
             placeholder="Your name"
             placeholderTextColor={T.muted}
-            autoFocus
             maxLength={20}
             returnKeyType="go"
             accessibilityLabel="Your name"
@@ -37,7 +78,7 @@ export default function Login({ onLoggedIn }: { onLoggedIn: (profile: Profile) =
           />
         </View>
 
-        <Button block size="lg" disabled={!trimmed} onPress={submit}>
+        <Button block size="lg" variant="outline" disabled={!trimmed} onPress={submit}>
           Start
         </Button>
         {/* PRD P0-1 is guest-first: never wall the timer behind an account. */}
@@ -45,7 +86,7 @@ export default function Login({ onLoggedIn }: { onLoggedIn: (profile: Profile) =
           block
           size="md"
           variant="ghost"
-          onPress={async () => onLoggedIn(await saveProfile({ name: 'Guest' }))}
+          onPress={async () => onLoggedIn(await saveProfile({ name: 'Guest' }), null)}
         >
           Continue as guest
         </Button>
@@ -73,5 +114,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     paddingVertical: 13,
   },
+  error: { fontFamily: T.font, fontSize: 13, lineHeight: 19, color: T.danger, textAlign: 'center' },
+  divider: { flexDirection: 'row', alignItems: 'center', gap: 10, marginVertical: 2 },
+  rule: { flex: 1, height: 1, backgroundColor: T.border },
+  or: { fontFamily: T.fontMedium, fontSize: 11, letterSpacing: 1.1, textTransform: 'uppercase', color: T.muted },
   inputFocused: { borderColor: T.primary, backgroundColor: T.card },
 });

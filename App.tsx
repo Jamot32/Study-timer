@@ -17,6 +17,11 @@ import StudyTimer from './components/StudyTimer';
 import Settings from './components/Settings';
 import BottomTabs, { type AppTab } from './components/BottomTabs';
 import CountdownOverlay from './components/CountdownOverlay';
+import Loading from './components/Loading';
+import Login from './components/Login';
+import ProfileEdit from './components/ProfileEdit';
+import { clearProfile, loadProfile, saveProfile, type Profile } from './lib/profile';
+import { googleSheetAuth, type AuthSession } from './lib/auth';
 import { Tabs, TabsContent } from './components/ui/tabs';
 import { T } from './components/nova';
 
@@ -37,6 +42,45 @@ export default function App() {
   // ROLL 이 책을 펼치면 탭 바까지 치운다. 책만 보이게.
   const [rollFocused, setRollFocused] = useState(false);
   const onRollFocus = useCallback((f: boolean) => setRollFocused(f), []);
+  // undefined = still checking storage, null = no local profile yet (show Login)
+  const [profile, setProfile] = useState<Profile | null | undefined>(undefined);
+  // present only when Google + the sheet allowlist approved this user
+  const [authSession, setAuthSession] = useState<AuthSession | null>(null);
+  const [editingProfile, setEditingProfile] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const [storedProfile, restoredSession] = await Promise.all([
+        loadProfile(),
+        googleSheetAuth.restoreSession().catch(() => null),
+      ]);
+      let next = storedProfile;
+      if (!next && restoredSession) {
+        next = await saveProfile({
+          name: restoredSession.user.displayName,
+          avatar: restoredSession.user.avatar,
+        });
+      }
+      if (cancelled) return;
+      setAuthSession(restoredSession);
+      setProfile(next);
+    })().catch(() => {
+      if (!cancelled) setProfile(null);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const signOut = useCallback(async () => {
+    await googleSheetAuth.signOut();
+    await clearProfile();
+    setAuthSession(null);
+    setEditingProfile(false);
+    setActiveTab('battle');
+    setProfile(null);
+  }, []);
 
   useEffect(() => {
     if (countdown === null) return;
@@ -47,6 +91,22 @@ export default function App() {
   // after every hook — an early return above them breaks hook order on load.
   // fontError falls through to the system font rather than hanging on a blank screen.
   if (!fontsLoaded && !fontError) return null;
+  if (profile === undefined) return <Loading />;
+  if (profile === null) {
+    return (
+      <SafeAreaProvider>
+        <SafeAreaView style={styles.safeArea} edges={['top', 'left', 'right', 'bottom']}>
+          <Login
+            onLoggedIn={(nextProfile, session) => {
+              setAuthSession(session);
+              setProfile(nextProfile);
+            }}
+          />
+          <StatusBar style="dark" />
+        </SafeAreaView>
+      </SafeAreaProvider>
+    );
+  }
 
   // 매치 중(타이머)과 책을 펼친 ROLL 에서만 탭 바를 감춘다.
   const showTabs = !(activeTab === 'battle' && battleActive) && !(activeTab === 'roll' && rollFocused);
@@ -75,6 +135,11 @@ export default function App() {
                 showsVerticalScrollIndicator={false}
               >
                 <StudyTimer
+                  profile={profile}
+                  onOpenProfile={() => {
+                    setEditingProfile(true);
+                    setActiveTab('settings');
+                  }}
                   matchStarting={countdown !== null}
                   onFinished={() => {
                     setCountdown(null);
@@ -105,7 +170,21 @@ export default function App() {
           </TabsContent>
 
           <TabsContent value="settings" className="flex-1 w-full max-w-lg mx-auto">
-            <Settings onChanged={() => setRefreshKey((k) => k + 1)} />
+            {editingProfile ? (
+              <ProfileEdit
+                profile={profile}
+                onProfileChanged={setProfile}
+                onBack={() => setEditingProfile(false)}
+              />
+            ) : (
+              <Settings
+                onChanged={() => setRefreshKey((k) => k + 1)}
+                profile={profile}
+                authSession={authSession}
+                onEditProfile={() => setEditingProfile(true)}
+                onSignOut={signOut}
+              />
+            )}
           </TabsContent>
 
         </Tabs>

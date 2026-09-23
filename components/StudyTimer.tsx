@@ -5,7 +5,7 @@ import { Check, Flag, Moon, Pause, Play, RotateCcw, Sun } from 'lucide-react-nat
 import { confirmDestructive } from '../lib/confirm'
 import { useStudyTimer } from '../lib/useStudyTimer'
 import { awayOutcome } from '../lib/away'
-import { type Profile } from '../lib/auth'
+import { type Profile } from '../lib/profile'
 import { Avatar } from './Avatar'
 import ConfirmDialog from './PixelConfirm'
 import { Button, Card, ProgressBar, RADIUS, T } from './nova'

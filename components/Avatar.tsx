@@ -1,7 +1,7 @@
 import React, { useRef } from 'react';
 import { Image, PanResponder, StyleSheet, Text, View } from 'react-native';
 import { ABS_FILL, elevation, T } from '@/components/nova';
-import { clamp01, isImageAvatar, type Profile, type Sticker } from '@/lib/auth';
+import { clamp01, isImageAvatar, type Profile, type Sticker } from '@/lib/profile';
 
 /** Sticker box as a fraction of the picture. */
 const STICKER_RATIO = 0.28;

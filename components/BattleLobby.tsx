@@ -11,7 +11,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { ChevronRight, Coins, Sprout, Swords, Trophy, X } from 'lucide-react-native';
 import Svg, { Circle, Ellipse, Path } from 'react-native-svg';
 import { Button, Card, RADIUS, T, elevation } from './nova';
-import { loadProfile, type Profile } from '../lib/auth';
+import { loadProfile, type Profile } from '../lib/profile';
 
 type BattlePhase = 'lobby' | 'searching' | 'matchFound';
 
