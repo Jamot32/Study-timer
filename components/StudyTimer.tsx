@@ -1,7 +1,8 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { Alert, AppState, Pressable, StyleSheet, Text, View } from 'react-native'
+import { Alert, Animated, AppState, Easing, Platform, Pressable, StyleSheet, Text, View } from 'react-native'
 import { LinearGradient } from 'expo-linear-gradient'
-import { Check, Flag, Moon, Pause, Play, RotateCcw, Sun } from 'lucide-react-native'
+import { Check, Coins, Flag, Flame, Moon, Pause, Play, RotateCcw, Sun } from 'lucide-react-native'
+import Svg, { Circle, Defs, LinearGradient as SvgGradient, Stop } from 'react-native-svg'
 import { confirmDestructive } from '../lib/confirm'
 import { useStudyTimer } from '../lib/useStudyTimer'
 import { awayOutcome } from '../lib/away'
@@ -9,7 +10,14 @@ import { type Profile } from '../lib/auth'
 import { Avatar } from './Avatar'
 import ConfirmDialog from './PixelConfirm'
 import { Button, Card, ProgressBar, RADIUS, T } from './nova'
-import { OPPONENT } from './BattleLobby'
+import { formatMatchLength, type Rank } from '../lib/ranks'
+import {
+  cpuStatusLabel,
+  initialCpuState,
+  tickCpu,
+  type CpuOpponent,
+  type CpuState,
+} from '../lib/cpuOpponent'
 
 // ============================================================
 // STUDY TIMER — React Native (Expo)
@@ -17,15 +25,58 @@ import { OPPONENT } from './BattleLobby'
 // ============================================================
 
 // ---------- 설정 ----------
-// 하늘이 한 사이클(낮→밤) 도는 데 걸리는 시간(초).
-// 지금은 테스트용으로 60초. 실사용 시 3600으로 되돌리세요.
-const CYCLE_SECONDS = 3600
+// 한 시간이 기준. 하늘도, 아래 게이지도, 불꽃이 거세지는 주기도 모두 여기에 맞춘다.
+const HOUR_SECONDS = 3600
+// 하늘이 한 사이클(낮→밤) 도는 데 걸리는 시간(초). 한 시간에 한 바퀴.
+const CYCLE_SECONDS = HOUR_SECONDS
 // 사이클을 어느 시점에서 시작할지 (0~1).
 // 0.22 = 아침~낮 시작 지점. 0이면 동트기 전부터 시작.
 const SKY_START = 0.22
 
-// 브레이크 적립 기준(초). 이건 하늘 주기와 무관하게 항상 1시간 유지.
-const BREAK_EARN_SECONDS = 3600
+// 브레이크 적립 기준(초).
+const BREAK_EARN_SECONDS = HOUR_SECONDS
+
+// ---------- 대전 ----------
+// 티어가 없을 때 쓰는 기본 판 길이. 보통은 rank.matchSeconds 가 이 값을 대신한다.
+const BATTLE_MAX_SECONDS = 5 * 3600
+// 집중 1분에 H-Coin 하나.
+const COIN_SECONDS = 60
+// 상대가 한 시간을 채울 때마다 불꽃이 한 단계 더 거세진다. 5단계가 끝.
+const FLAME_STAGES = 5
+
+// 링 한 바퀴 = 한 시간. 바퀴를 넘길 때마다 게이지 색이 올리브에서 앰버로 달아오른다.
+// 마지막 색에 닿으면 그대로 유지한다.
+const LAP_COLORS: readonly (readonly [string, string])[] = [
+  ['#6B8E23', '#556B2F'], // 1시간: 올리브 그린
+  ['#83A129', '#617A2C'], // 2시간: 밝은 잎색
+  ['#A9B02A', '#828A27'], // 3시간: 익은 풀색
+  ['#D9A227', '#A87A1F'], // 4시간: 금빛
+  ['#F59E0B', '#D97706'], // 5시간: 앰버
+] as const
+// 과목 기능이 붙기 전까지 일반 모드 상단에 띄우는 자리.
+const FOCUS_SUBJECT = 'Deep focus'
+
+// ---------- 다이얼 팔레트 (올리브 그린 + 앰버) ----------
+const DIAL = {
+  base: '#1C1F1A',
+  track: '#2B3126',
+  gauge: '#6B8E23',
+  gaugeDeep: '#556B2F',
+  amber: '#F59E0B',
+  amberDeep: '#D97706',
+  text: '#F3F4F6',
+  textDim: '#A7AD99',
+} as const
+
+// 하늘은 링 안쪽에 그대로 두되 이만큼 어둡게 깔아 숫자가 뜨게 한다.
+const SKY_DIM = 0.76
+
+// 숫자가 바뀌어도 폭이 흔들리지 않게 고정폭 글꼴을 쓴다.
+const TIMER_FONT = Platform.select({
+  ios: 'Menlo',
+  android: 'monospace',
+  default: 'ui-monospace, SFMono-Regular, Menlo, monospace',
+})
 
 // ---------- 프로시저럴 하늘 ----------
 // 한 사이클(CYCLE_SECONDS) 동안 아래 키프레임 사이를 매초 보간한다.
@@ -117,12 +168,91 @@ const formatWeeklyMax = (totalSeconds: number) => {
   return `${h}H ${m.toString().padStart(2, '0')}M`
 }
 
+/** 대전 격차용. 한 시간을 넘으면 시:분:초, 아니면 분:초. */
+const formatGap = (totalSeconds: number) => {
+  const s = Math.abs(totalSeconds)
+  const mm = Math.floor((s % 3600) / 60).toString().padStart(2, '0')
+  const ss = (s % 60).toString().padStart(2, '0')
+  if (s >= 3600) return `${Math.floor(s / 3600)}:${mm}:${ss}`
+  return `${mm}:${ss}`
+}
+
+const clamp01 = (value: number) => Math.max(0, Math.min(1, value))
+
+// ---------- 진행 링 ----------
+const DIAL_SIZE = 276
+const RING_STROKE = 14
+const RING_R = 120
+const RING_CX = DIAL_SIZE / 2
+const RING_LEN = 2 * Math.PI * RING_R
+
+// 진행도(0~1)를 링 위 좌표로. 12시에서 출발해 시계 방향으로 돈다.
+const pointOn = (progress: number, radius: number) => {
+  const angle = clamp01(progress) * Math.PI * 2 - Math.PI / 2
+  return { x: RING_CX + Math.cos(angle) * radius, y: RING_CX + Math.sin(angle) * radius }
+}
+
+function DialRing({
+  progress,
+  colors,
+  opponent,
+  heat,
+}: {
+  /** 이번 바퀴의 진행률 0~1. */
+  progress: number
+  /** 게이지 그라디언트 두 색. 바퀴마다 바뀐다. */
+  colors: readonly [string, string]
+  /** 상대 진행률 0~1. 대전이 아니면 null. */
+  opponent: number | null
+  /** 상대 불꽃의 세기 0~1. 번짐의 크기와 진하기를 키운다. */
+  heat: number
+}) {
+  const filled = clamp01(progress)
+  const rival = opponent === null ? null : pointOn(opponent, RING_R)
+  return (
+    <Svg width={DIAL_SIZE} height={DIAL_SIZE} style={ABS_FILL} pointerEvents="none">
+      <Defs>
+        <SvgGradient id="gauge" x1="0" y1="0" x2="1" y2="1">
+          <Stop offset="0" stopColor={colors[0]} />
+          <Stop offset="1" stopColor={colors[1]} />
+        </SvgGradient>
+      </Defs>
+
+      {/* 비어 있는 궤도 */}
+      <Circle cx={RING_CX} cy={RING_CX} r={RING_R} stroke={DIAL.track} strokeWidth={RING_STROKE} fill="none" />
+
+      {/* 내 공부 시간 게이지 */}
+      {filled > 0 && (
+        <Circle
+          cx={RING_CX}
+          cy={RING_CX}
+          r={RING_R}
+          stroke="url(#gauge)"
+          strokeWidth={RING_STROKE}
+          strokeLinecap="round"
+          fill="none"
+          strokeDasharray={`${RING_LEN} ${RING_LEN}`}
+          strokeDashoffset={RING_LEN * (1 - filled)}
+          transform={`rotate(-90 ${RING_CX} ${RING_CX})`}
+        />
+      )}
+
+      {/* 상대가 서 있는 자리의 번짐. 불꽃은 이 위에 겹쳐 올린다. */}
+      {rival && (
+        <Circle cx={rival.x} cy={rival.y} r={13 + heat * 9} fill={DIAL.amber} opacity={0.16 + heat * 0.22} />
+      )}
+    </Svg>
+  )
+}
+
 // ---------- 메인 컴포넌트 ----------
 export function StudyTimer({
   onFinished,
   onOpenProfile,
   onResign,
   matchStarting = false,
+  opponent,
+  rank,
   profile,
 }: {
   onFinished?: () => void
@@ -131,6 +261,10 @@ export function StudyTimer({
   onResign?: () => void
   /** 3-2-1 카운트다운이 도는 중. 끝나기 전까지는 상대 시계도 멈춰 있다. */
   matchStarting?: boolean
+  /** 이번 판의 상대. 매칭 때 지어진 CPU 가 그대로 넘어온다. */
+  opponent?: CpuOpponent | null
+  /** 이번 판의 티어. 판 길이와 판돈이 여기서 온다. */
+  rank?: Rank | null
   /** Logged-in profile; drives the header avatar, outer line, title and name. */
   profile?: Profile
 }) {
@@ -141,8 +275,8 @@ export function StudyTimer({
   const [breakElapsed, setBreakElapsed] = useState(0)
   const [isFinishing, setIsFinishing] = useState(false)
   const [confirmResign, setConfirmResign] = useState(false)
-  // 상대 타이머. 서버가 없으니 매치가 걸린 동안 1초씩 도는 로컬 시뮬레이션이다.
-  const [opponentElapsed, setOpponentElapsed] = useState(0)
+  // 상대는 cpuOpponent 모델이 1초씩 굴려 준다. 쉬기도 하고, 기권도 한다.
+  const [cpu, setCpu] = useState<CpuState | null>(null)
 
   // FOCUS runs on the shared timer so finished sessions actually reach the
   // dashboard; SHORT BREAK runs on its own counter so break time is never
@@ -166,15 +300,26 @@ export function StudyTimer({
 
   // 배틀 중일 때만 상대 시계가 돈다. 3-2-1 카운트다운이 끝나야 비로소 출발한다.
   const inBattle = onResign !== undefined
+  const opponentElapsed = cpu?.studiedSeconds ?? 0
+  // 판 길이는 티어가 정한다 — Iron 30분에서 Challenger 5시간까지.
+  const matchSeconds = rank?.matchSeconds ?? BATTLE_MAX_SECONDS
+
+  // 상대가 바뀌면(=새 판) 상태를 처음부터 세운다.
   useEffect(() => {
-    if (!inBattle || matchStarting) {
-      // 카운트다운 동안엔 0 으로 세워 둔다.
-      if (matchStarting) setOpponentElapsed(0)
-      return
-    }
-    const interval = setInterval(() => setOpponentElapsed((value) => value + 1), 1000)
+    setCpu(opponent ? initialCpuState(opponent) : null)
+  }, [opponent])
+
+  // CPU 는 내 공부 시간을 보고 반응한다. 리스너를 매초 새로 걸지 않도록 ref 로 읽는다.
+  const focusRef = useRef(0)
+  focusRef.current = focusElapsed
+
+  useEffect(() => {
+    if (!inBattle || matchStarting || !opponent) return
+    const interval = setInterval(() => {
+      setCpu((state) => (state ? tickCpu(state, opponent, { userSeconds: focusRef.current }) : state))
+    }, 1000)
     return () => clearInterval(interval)
-  }, [inBattle, matchStarting])
+  }, [inBattle, matchStarting, opponent])
 
   // one 5-minute credit per full hour of focus. Counting crossings rather than
   // `elapsed % 3600 === 0` because the shared timer ticks every 100ms and can
@@ -192,7 +337,28 @@ export function StudyTimer({
   const cycleProgress = (elapsed % CYCLE_SECONDS) / CYCLE_SECONDS
   const skyColors = useMemo(() => skyAt(cycleProgress + SKY_START), [cycleProgress])
   const isDay = !isSkyDark(skyColors[1])
-  const skyText = isDay ? '#22261C' : '#F1EFE6'
+
+  // 링도 아래 게이지도 한 시간에 한 바퀴. 채우면 0에서 다시 돈다.
+  const hourProgress = (elapsed % HOUR_SECONDS) / HOUR_SECONDS
+  const hoursDone = Math.floor(elapsed / HOUR_SECONDS)
+  const lapColors = LAP_COLORS[Math.min(hoursDone, LAP_COLORS.length - 1)]
+  // 상대 불꽃도 같은 바퀴 위에 선다. 앞뒤 차이는 위쪽 격차 숫자로 읽는다.
+  const opponentProgress = inBattle ? (opponentElapsed % HOUR_SECONDS) / HOUR_SECONDS : null
+  // 불꽃 아이콘은 SVG 밖에 겹쳐 놓는다. 링 위 좌표만 미리 뽑아 둔다.
+  const rivalPoint = opponentProgress === null ? null : pointOn(opponentProgress, RING_R)
+  // 상대가 쌓은 시간만큼 불꽃이 커지고 색이 밝아진다.
+  const flameStage = rivalPoint === null ? 0 : Math.min(Math.floor(opponentElapsed / HOUR_SECONDS), FLAME_STAGES)
+  const flameHeat = flameStage / FLAME_STAGES
+  const flameColor = lerpColor(DIAL.amberDeep, '#FBBF24', flameHeat)
+  const flameSize = 18 + flameStage * 2
+  // 쉬거나 판을 접은 상대의 불꽃은 사그라든다.
+  const flameAlive = cpu?.phase === 'studying'
+  const rivalName = opponent?.name ?? 'Rival'
+  // 내가 앞서면 양수. 브레이크 시간은 대전에 안 들어간다.
+  const lead = focusElapsed - opponentElapsed
+  const coins = Math.floor(focusElapsed / COIN_SECONDS)
+  const paused = !onBreak && !isRunning && elapsedMs > 0
+
   const breakLabel = breakBank > 0 ? `${breakBank} minutes banked` : 'No break banked yet'
 
   const endBreak = useCallback(() => {
@@ -227,6 +393,42 @@ export function StudyTimer({
       setIsFinishing(false)
     }
   }, [elapsedMs, endBreak, finish, isFinishing, onBreak, onFinished])
+
+  // 대전은 카운트다운이 끝나는 순간 알아서 출발한다. 직접 누를 필요 없다.
+  const autoStarted = useRef(false)
+  useEffect(() => {
+    if (!inBattle) {
+      autoStarted.current = false
+      return
+    }
+    if (matchStarting || autoStarted.current) return
+    autoStarted.current = true
+    // 'ready' 일 때만. 사용자가 손수 멈춰 둔 세션을 다시 밀어 올리지는 않는다.
+    if (state === 'ready') toggle()
+  }, [inBattle, matchStarting, state, toggle])
+
+  // 티어의 판 길이를 채우면 판이 스스로 끝난다. 시간은 저장된다.
+  useEffect(() => {
+    if (!inBattle || onBreak) return
+    if (focusElapsed >= matchSeconds) handleFinish()
+  }, [focusElapsed, handleFinish, inBattle, matchSeconds, onBreak])
+
+  // PAUSED 는 앰버로 천천히 깜빡인다.
+  const blink = useRef(new Animated.Value(1)).current
+  useEffect(() => {
+    if (!paused) {
+      blink.setValue(1)
+      return
+    }
+    const loop = Animated.loop(
+      Animated.sequence([
+        Animated.timing(blink, { toValue: 0.25, duration: 650, easing: Easing.inOut(Easing.quad), useNativeDriver: true }),
+        Animated.timing(blink, { toValue: 1, duration: 650, easing: Easing.inOut(Easing.quad), useNativeDriver: true }),
+      ])
+    )
+    loop.start()
+    return () => loop.stop()
+  }, [blink, paused])
 
   // Leaving the app stops the clock; coming back resumes it. Stay away longer
   // than the limit without being on a paid break and the session is banked.
@@ -300,7 +502,7 @@ export function StudyTimer({
     setStreakBroken(false)
     setBreakElapsed(0)
     setMode('FOCUS')
-    setOpponentElapsed(0)
+    setCpu(opponent ? initialCpuState(opponent) : null)
     onResign?.()
   }
 
@@ -348,8 +550,11 @@ export function StudyTimer({
           {/* 상대 시계는 눌러서 보는 게 아니라 늘 작게 붙어 있다. */}
           {inBattle && (
             <View style={styles.rivalChip}>
-              <Text style={styles.rivalLabel}>{OPPONENT.name}</Text>
+              <Text style={styles.rivalLabel} numberOfLines={1}>
+                {rivalName}
+              </Text>
               <Text style={styles.rivalTime}>{formatTime(opponentElapsed)}</Text>
+              {cpu && <Text style={styles.rivalStatus}>{cpuStatusLabel(cpu)}</Text>}
             </View>
           )}
         </View>
@@ -361,6 +566,11 @@ export function StudyTimer({
             <Text style={styles.statusText}>
               {isRunning ? 'In session' : 'Ready when you are'}
             </Text>
+            {rank && (
+              <Text style={[styles.rankLine, { color: rank.color }]}>
+                {rank.name} · {formatMatchLength(rank.matchSeconds)} match · {rank.bet} coins staked
+              </Text>
+            )}
           </View>
           <Card level={0} tone="alt" radius={RADIUS.md} boxStyle={styles.weeklyBox}>
             <Text style={styles.weeklyLabel}>Weekly max</Text>
@@ -377,25 +587,91 @@ export function StudyTimer({
               locations={[0, 0.52, 1]}
               style={ABS_FILL}
             />
+            {/* 하늘을 눌러 어둡게 깐다. 숫자와 게이지가 읽히는 게 먼저다. */}
+            <View style={[ABS_FILL, { backgroundColor: DIAL.base, opacity: SKY_DIM }]} />
+            <DialRing progress={hourProgress} colors={lapColors} opponent={opponentProgress} heat={flameHeat} />
             <View style={styles.dialContent}>
-              <View style={styles.cycleRow}>
-                <SkyIcon size={15} color={skyText} />
-                <Text style={[styles.cycleText, { color: skyText }]}>
-                  {isDay ? 'Day cycle' : 'Night cycle'}
-                </Text>
-              </View>
-              <Text style={[styles.time, { color: skyText }]} accessibilityLiveRegion="polite">
+              {/* 위: 대전이면 격차, 아니면 지금 붙잡고 있는 과목 */}
+              {inBattle ? (
+                <View style={styles.dialTop}>
+                  <Text style={[styles.gapText, { color: lead >= 0 ? DIAL.gauge : DIAL.amber }]}>
+                    {lead >= 0 ? '▲' : '▼'} {lead >= 0 ? '+' : '-'}
+                    {formatGap(lead)}
+                  </Text>
+                  <Text style={styles.dialSub} numberOfLines={1}>
+                    vs {rivalName}
+                  </Text>
+                </View>
+              ) : (
+                <View style={styles.dialTop}>
+                  <View style={styles.cycleRow}>
+                    <SkyIcon size={14} color={DIAL.textDim} />
+                    <Text style={styles.cycleText}>{FOCUS_SUBJECT}</Text>
+                  </View>
+                  <Text style={styles.dialSub}>{isDay ? 'Day cycle' : 'Night cycle'}</Text>
+                </View>
+              )}
+
+              {/* 가운데: 시:분:초 */}
+              <Text
+                style={styles.time}
+                numberOfLines={1}
+                adjustsFontSizeToFit
+                minimumFontScale={0.7}
+                accessibilityLiveRegion="polite"
+              >
                 {time}
               </Text>
-              <Text style={[styles.cycleSub, { color: skyText }]}>
-                {Math.round(cycleProgress * 100)}% of cycle
-              </Text>
+
+              {/* 아래: 실시간 재화와 상태 */}
+              <View style={styles.dialBottom}>
+                <View style={styles.coinRow}>
+                  <Coins size={13} color={DIAL.amber} strokeWidth={2.4} />
+                  <Text style={styles.coinText}>+{coins} H-Coin</Text>
+                </View>
+                {paused ? (
+                  <Animated.Text style={[styles.pausedText, { opacity: blink }]}>PAUSED</Animated.Text>
+                ) : (
+                  <Text style={styles.dialSub}>
+                    {hoursDone > 0 ? `${hoursDone}H done · lap ${hoursDone + 1}` : 'First lap'}
+                  </Text>
+                )}
+              </View>
             </View>
+
+            {/* 상대의 불꽃. 내 게이지 머리를 쫓아온다. */}
+            {rivalPoint && (
+              <View
+                style={[
+                  styles.rivalMark,
+                  {
+                    left: rivalPoint.x - 16,
+                    top: rivalPoint.y - 16,
+                    shadowColor: flameColor,
+                    shadowOpacity: 0.35 + flameHeat * 0.45,
+                    shadowRadius: 4 + flameStage * 3,
+                  },
+                ]}
+              >
+                <Flame
+                  size={flameSize}
+                  color={flameColor}
+                  fill={flameColor}
+                  strokeWidth={1.8}
+                  opacity={flameAlive ? 1 : 0.4}
+                />
+              </View>
+            )}
           </View>
         </View>
 
         <View style={styles.progressWrap}>
-          <ProgressBar value={cycleProgress} height={8} />
+          <View style={styles.hourRow}>
+            <Text style={styles.label}>{hoursDone > 0 ? `Hour ${hoursDone + 1}` : 'This hour'}</Text>
+            <Text style={styles.hourValue}>{Math.round(hourProgress * 100)}%</Text>
+          </View>
+          {/* 링과 같은 색으로 찬다. 바퀴가 바뀌면 여기 색도 같이 바뀐다. */}
+          <ProgressBar value={hourProgress} height={8} color={lapColors[0]} />
         </View>
 
         {/* 컨트롤 */}
@@ -512,6 +788,7 @@ const styles = StyleSheet.create({
     color: T.muted,
   },
   rivalTime: { fontFamily: T.fontDisplay, fontSize: 15, color: T.inkSoft, marginTop: 1 },
+  rivalStatus: { fontFamily: T.font, fontSize: 10, color: T.muted, marginTop: 1 },
   label: {
     fontFamily: T.fontMedium,
     fontSize: 11,
@@ -530,6 +807,7 @@ const styles = StyleSheet.create({
     paddingTop: 14,
   },
   statusText: { fontFamily: T.font, fontSize: 14, color: T.muted, marginTop: 3 },
+  rankLine: { fontFamily: T.fontMedium, fontSize: 11, marginTop: 4 },
   weeklyBox: { paddingHorizontal: 14, paddingVertical: 10, alignItems: 'flex-end' },
   weeklyLabel: {
     fontFamily: T.fontMedium,
@@ -542,9 +820,9 @@ const styles = StyleSheet.create({
 
   dialWrap: { alignSelf: 'center', marginTop: 22 },
   dial: {
-    width: 276,
-    height: 276,
-    borderRadius: 138,
+    width: DIAL_SIZE,
+    height: DIAL_SIZE,
+    borderRadius: DIAL_SIZE / 2,
     overflow: 'hidden',
     alignItems: 'center',
     justifyContent: 'center',
@@ -555,13 +833,57 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 12 },
     elevation: 6,
   },
-  dialContent: { alignItems: 'center' },
-  cycleRow: { flexDirection: 'row', alignItems: 'center', gap: 7, marginBottom: 14 },
-  cycleText: { fontFamily: T.fontMedium, fontSize: 13, letterSpacing: 0.3 },
-  time: { fontFamily: T.fontDisplay, fontSize: 46, letterSpacing: -1 },
-  cycleSub: { fontFamily: T.font, fontSize: 12, marginTop: 12, opacity: 0.8 },
+  dialContent: { alignItems: 'center', width: RING_R * 2 - RING_STROKE - 18 },
+  rivalMark: {
+    position: 'absolute',
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: DIAL.base,
+    // 불꽃 자체가 빛나 보이게. 색과 세기는 단계에 따라 덮어쓴다.
+    shadowOffset: { width: 0, height: 0 },
+    elevation: 4,
+  },
+  dialTop: { alignItems: 'center', marginBottom: 12 },
+  dialBottom: { alignItems: 'center', marginTop: 14, height: 34 },
+  cycleRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  cycleText: { fontFamily: T.fontMedium, fontSize: 13, letterSpacing: 0.3, color: DIAL.textDim },
+  dialSub: { fontFamily: T.font, fontSize: 11, letterSpacing: 0.4, color: DIAL.textDim, marginTop: 4 },
+  gapText: {
+    fontFamily: TIMER_FONT,
+    fontSize: 17,
+    letterSpacing: 0.6,
+    fontVariant: ['tabular-nums'],
+  },
+  // 고정폭이라 초가 바뀌어도 숫자가 좌우로 흔들리지 않는다.
+  time: {
+    fontFamily: TIMER_FONT,
+    fontSize: 34,
+    letterSpacing: 0,
+    color: DIAL.text,
+    fontVariant: ['tabular-nums'],
+    includeFontPadding: false,
+  },
+  coinRow: { flexDirection: 'row', alignItems: 'center', gap: 5 },
+  coinText: { fontFamily: T.fontMedium, fontSize: 13, color: DIAL.amber, letterSpacing: 0.3 },
+  pausedText: {
+    fontFamily: T.fontMedium,
+    fontSize: 12,
+    letterSpacing: 2,
+    color: DIAL.amber,
+    marginTop: 4,
+  },
 
   progressWrap: { marginTop: 20 },
+  hourRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 8,
+  },
+  hourValue: { fontFamily: T.fontMedium, fontSize: 12, color: T.inkSoft },
 
   controls: { flexDirection: 'row', gap: 10, marginTop: 20 },
   mainButton: { flex: 1, alignSelf: 'stretch' },

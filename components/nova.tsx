@@ -255,11 +255,14 @@ export function ProgressBar({
   value,
   tone = 'primary',
   height = 10,
+  color,
 }: {
   /** 0–1 */
   value: number;
   tone?: 'primary' | 'accent';
   height?: number;
+  /** tone 을 무시하고 이 색으로 채운다. 단계마다 색이 바뀌는 게이지용. */
+  color?: string;
 }) {
   const pct = Math.max(0, Math.min(1, value));
   return (
@@ -273,7 +276,7 @@ export function ProgressBar({
           height: '100%',
           width: `${pct * 100}%`,
           borderRadius: height / 2,
-          backgroundColor: tone === 'accent' ? T.accent : T.primary,
+          backgroundColor: color ?? (tone === 'accent' ? T.accent : T.primary),
         }}
       />
     </View>

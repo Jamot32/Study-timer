@@ -1,23 +1,27 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Animated,
   Easing,
+  Pressable,
+  ScrollView,
   StyleSheet,
   Text,
   View,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
-import { ChevronRight, Coins, Sprout, Swords, Trophy, X } from 'lucide-react-native';
+import { ChevronRight, Clock, Coins, Lock, Sprout, Swords, Trophy, X } from 'lucide-react-native';
 import Svg, { Circle, Ellipse, Path } from 'react-native-svg';
 import { Button, Card, RADIUS, T, elevation } from './nova';
 import { loadProfile, type Profile } from '../lib/auth';
+import { createCpuOpponent, type CpuOpponent } from '../lib/cpuOpponent';
+import { formatMatchLength, highestUnlocked, isUnlocked, RANKS, type Rank } from '../lib/ranks';
 
 type BattlePhase = 'lobby' | 'searching' | 'matchFound';
 
 type BattleLobbyProps = {
   /** 매치가 잡혔다. 카운트다운부터는 App 이 타이머 화면 위에서 이어 간다. */
-  onMatchStart: () => void;
+  onMatchStart: (opponent: CpuOpponent, rank: Rank) => void;
   /** 매칭을 걸었는지(=탭을 잠가야 하는지) 알린다. */
   onMatchmakingChange?: (searching: boolean) => void;
 };
@@ -29,12 +33,24 @@ const TIPS = [
   'Your opponent is studying too. Stay sharp.',
 ];
 
-export const OPPONENT = {
-  name: 'Nova Mint',
-  trophies: 1842,
-  title: 'Focus Ranger',
-  avatar: '🦊',
-};
+// ---------- 매칭 규칙 ----------
+// 이 초까지는 사람 상대만 찾는다.
+const CPU_FALLBACK_SECONDS = 18;
+// 그 뒤로는 매초 CPU 상대를 부른다. 18, 19, 20, 21, 22… 어디서든 잡힐 수 있다.
+const CPU_MATCH_CHANCE = 0.4;
+// 아무리 운이 없어도 이 초에는 반드시 붙는다. 무한 대기 방지.
+const CPU_MATCH_DEADLINE = 30;
+
+/**
+ * 사람 상대를 찾아본다. 서버가 붙기 전까지는 늘 빈손이라 실제로는
+ * 항상 18초 뒤 CPU 로 넘어간다. 서버가 생기면 이 함수만 바꿔 끼우면 된다.
+ */
+const findRealOpponent = (): CpuOpponent | null => null;
+
+/** 유저 트로피. 프로필 저장이 붙기 전까지는 이 값이 기준점이다. */
+const PLAYER_TROPHIES = 2137;
+/** 가진 코인. 판돈을 못 내는 리그는 잠긴다. */
+const PLAYER_COINS = 480;
 
 function StatPill({
   icon: Icon,
@@ -86,8 +102,8 @@ function ProfileStrip({
   );
 }
 
-/** 대결이 열리는 장소 — 담장 너머의 비밀 정원. 부드러운 언덕과 아치 문. */
-function ArenaArt() {
+/** 대결이 열리는 장소. 배지에는 지금 고른 티어가 뜬다. */
+function ArenaArt({ rank }: { rank: Rank }) {
   return (
     <Card level={2} radius={RADIUS.xl} style={styles.arenaFrame} boxStyle={styles.arenaBorder}>
       <LinearGradient colors={['#F7EFD9', '#FBF8F0', '#EDF0E2']} style={styles.arena}>
@@ -114,22 +130,121 @@ function ArenaArt() {
         </Svg>
 
         <View style={styles.arenaBadge}>
-          <Text style={styles.arenaBadgeText}>Garden IV</Text>
-          <Text style={styles.arenaName}>The Study Courtyard</Text>
+          <View style={styles.arenaTierRow}>
+            <View style={[styles.arenaTierDot, { backgroundColor: rank.color }]} />
+            <Text style={[styles.arenaBadgeText, { color: rank.color }]}>{rank.name}</Text>
+            <Text style={styles.arenaBadgeMeta}>
+              {formatMatchLength(rank.matchSeconds)} · {rank.bet} coins
+            </Text>
+          </View>
+          <Text style={styles.arenaName}>{rank.blurb}</Text>
         </View>
       </LinearGradient>
     </Card>
   );
 }
 
-function SearchOverlay({ elapsed, tip, onCancel }: { elapsed: number; tip: string; onCancel: () => void }) {
+/**
+ * 티어 고르기. 판당 시간과 판돈이 곧 등급이고, 들어가려면 지갑에
+ * minCoins 이상을 들고 있어야 한다 — 판돈만 있으면 되는 게 아니다.
+ */
+function RankPicker({
+  selected,
+  coins,
+  onSelect,
+}: {
+  selected: Rank;
+  /** 지금 가진 코인. */
+  coins: number;
+  onSelect: (rank: Rank) => void;
+}) {
+  return (
+    <View>
+      <View style={styles.rankHeader}>
+        <Text style={styles.rankHeaderLabel}>Tier</Text>
+        <Text style={styles.rankHeaderHint}>
+          {coins.toLocaleString()} coins held · pick a match length
+        </Text>
+      </View>
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        contentContainerStyle={styles.rankRow}
+      >
+        {RANKS.map((rank) => {
+          const active = rank.id === selected.id;
+          const open = isUnlocked(rank, coins);
+          return (
+            <Pressable
+              key={rank.id}
+              onPress={() => open && onSelect(rank)}
+              disabled={!open}
+              accessibilityRole="button"
+              accessibilityState={{ selected: active, disabled: !open }}
+              accessibilityLabel={
+                open
+                  ? `${rank.name}, ${formatMatchLength(rank.matchSeconds)} match, ${rank.bet} coin stake`
+                  : `${rank.name}, locked, needs ${rank.minCoins} coins`
+              }
+              style={[
+                styles.rankCard,
+                active && { borderColor: rank.color, borderWidth: 2, backgroundColor: T.cardAlt },
+                !open && styles.rankCardLocked,
+              ]}
+            >
+              <View style={styles.rankTop}>
+                <View style={[styles.rankDot, { backgroundColor: rank.color }]} />
+                <Text style={[styles.rankName, active && { color: rank.color }]} numberOfLines={1}>
+                  {rank.name}
+                </Text>
+              </View>
+              <View style={styles.rankMeta}>
+                <Clock size={11} color={T.muted} strokeWidth={2.2} />
+                <Text style={styles.rankMetaText}>{formatMatchLength(rank.matchSeconds)}</Text>
+              </View>
+              <View style={styles.rankMeta}>
+                <Coins size={11} color={T.muted} strokeWidth={2.2} />
+                <Text style={styles.rankMetaText}>{rank.bet}</Text>
+              </View>
+              {open ? (
+                <Text style={styles.rankEntry}>
+                  {rank.minCoins === 0 ? 'open to all' : `${rank.minCoins.toLocaleString()}+`}
+                </Text>
+              ) : (
+                <View style={styles.rankMeta}>
+                  <Lock size={10} color={T.danger} strokeWidth={2.4} />
+                  <Text style={styles.rankLocked}>{rank.minCoins.toLocaleString()}</Text>
+                </View>
+              )}
+            </Pressable>
+          );
+        })}
+      </ScrollView>
+    </View>
+  );
+}
+
+function SearchOverlay({
+  elapsed,
+  tip,
+  fallback,
+  onCancel,
+}: {
+  elapsed: number;
+  tip: string;
+  /** 18초를 넘겨 CPU 상대를 찾는 중인지. */
+  fallback: boolean;
+  onCancel: () => void;
+}) {
   return (
     <View style={styles.overlay}>
       <Card level={3} radius={RADIUS.xl} style={styles.searchFrame} boxStyle={styles.searchCard}>
         <ActivityIndicator size="large" color={T.primary} />
         <Text style={styles.searchEyebrow}>Searching the garden</Text>
         <Text style={styles.searchTime}>00:{elapsed.toString().padStart(2, '0')}</Text>
-        <Text style={styles.searchCopy}>Finding a worthy study rival…</Text>
+        <Text style={styles.searchCopy}>
+          {fallback ? 'No rival nearby — calling in a CPU sparring partner…' : 'Finding a worthy study rival…'}
+        </Text>
         <Button
           variant="outline"
           onPress={onCancel}
@@ -151,9 +266,15 @@ function SearchOverlay({ elapsed, tip, onCancel }: { elapsed: number; tip: strin
 
 function MatchFoundOverlay({
   player,
+  opponent,
+  cpu,
   onCountdown,
 }: {
   player: { name: string; trophies: number; title: string; avatar: string };
+  /** 이번 판의 상대. 매칭 순간에 지어진다. */
+  opponent: { name: string; trophies: number; title: string; avatar: string };
+  /** CPU 상대로 잡힌 판인지. */
+  cpu: boolean;
   onCountdown: () => void;
 }) {
   const topY = useRef(new Animated.Value(-220)).current;
@@ -173,8 +294,8 @@ function MatchFoundOverlay({
   return (
     <View style={styles.vsOverlay}>
       <Animated.View style={[styles.vsHalf, styles.vsTop, { transform: [{ translateY: topY }] }]}>
-        <Text style={styles.vsCaption}>Opponent</Text>
-        <ProfileStrip profile={OPPONENT} />
+        <Text style={styles.vsCaption}>{cpu ? 'Opponent · CPU' : 'Opponent'}</Text>
+        <ProfileStrip profile={opponent} />
       </Animated.View>
       <Animated.View style={[styles.vsHalf, styles.vsBottom, { transform: [{ translateY: bottomY }] }]}>
         <Text style={styles.vsCaption}>You</Text>
@@ -191,6 +312,10 @@ export default function BattleLobby({ onMatchStart, onMatchmakingChange }: Battl
   const [phase, setPhase] = useState<BattlePhase>('lobby');
   const [elapsed, setElapsed] = useState(0);
   const [tipIndex, setTipIndex] = useState(0);
+  const [vsCpu, setVsCpu] = useState(false);
+  const [rival, setRival] = useState<CpuOpponent | null>(null);
+  // 지갑이 감당하는 가장 높은 티어에서 시작한다.
+  const [rank, setRank] = useState<Rank>(highestUnlocked(PLAYER_COINS));
   const [profile, setProfile] = useState<Profile>({ name: 'Focus Knight', avatar: '🦉' });
 
   useEffect(() => {
@@ -201,18 +326,41 @@ export default function BattleLobby({ onMatchStart, onMatchmakingChange }: Battl
 
   useEffect(() => {
     if (phase !== 'searching') return;
-    const interval = setInterval(() => setElapsed((value) => value + 1), 1000);
-    const found = setTimeout(() => setPhase('matchFound'), 3200);
+    // 초를 지역 변수로 센다. 매 초 상대를 한 번 찾아보고, 잡히면 그 자리에서 끝난다.
+    let seconds = 0;
+    const interval = setInterval(() => {
+      seconds += 1;
+      setElapsed(seconds);
+
+      const human = findRealOpponent();
+      if (human !== null) {
+        setRival(human);
+        setVsCpu(false);
+        setPhase('matchFound');
+        return;
+      }
+
+      if (seconds < CPU_FALLBACK_SECONDS) return;
+      if (seconds >= CPU_MATCH_DEADLINE || Math.random() < CPU_MATCH_CHANCE) {
+        // 상대는 여기서 한 명 지어진다 — 외형도 공부 습관도 이 순간 정해진다.
+        setRival(
+          createCpuOpponent({ userTrophies: PLAYER_TROPHIES, matchSeconds: rank.matchSeconds })
+        );
+        setVsCpu(true);
+        setPhase('matchFound');
+      }
+    }, 1000);
     const tip = setInterval(() => setTipIndex((value) => (value + 1) % TIPS.length), 3500);
     return () => {
       clearInterval(interval);
-      clearTimeout(found);
       clearInterval(tip);
     };
-  }, [phase]);
+  }, [phase, rank]);
 
   const startSearching = () => {
     setElapsed(0);
+    setVsCpu(false);
+    setRival(null);
     setPhase('searching');
     onMatchmakingChange?.(true);
   };
@@ -223,10 +371,15 @@ export default function BattleLobby({ onMatchStart, onMatchmakingChange }: Battl
     onMatchmakingChange?.(false);
   };
 
+  // 오버레이의 1.5초 타이머가 리렌더마다 다시 걸리지 않게 고정해 둔다.
+  const handleCountdown = useCallback(() => {
+    if (rival) onMatchStart(rival, rank);
+  }, [onMatchStart, rank, rival]);
+
   const player = {
     name: profile.name || 'Focus Knight',
     avatar: profile.avatar || '🦉',
-    trophies: 2137,
+    trophies: PLAYER_TROPHIES,
     title: profile.title || 'Night Scholar',
   };
 
@@ -245,13 +398,15 @@ export default function BattleLobby({ onMatchStart, onMatchmakingChange }: Battl
           </View>
         </View>
         <View style={styles.headerStats}>
-          <StatPill icon={Trophy} label="Trophies" value="2,137" tone="amber" />
-          <StatPill icon={Coins} label="Coins" value="480" tone="olive" />
+          <StatPill icon={Trophy} label="Trophies" value={PLAYER_TROPHIES.toLocaleString()} tone="amber" />
+          <StatPill icon={Coins} label="Coins" value={PLAYER_COINS.toLocaleString()} tone="olive" />
         </View>
       </View>
 
       <View style={styles.content}>
-        <ArenaArt />
+        <ArenaArt rank={rank} />
+
+        <RankPicker selected={rank} coins={PLAYER_COINS} onSelect={setRank} />
 
         <Button
           block
@@ -266,7 +421,9 @@ export default function BattleLobby({ onMatchStart, onMatchmakingChange }: Battl
             </View>
             <View style={styles.battleCopy}>
               <Text style={styles.battleText}>Battle</Text>
-              <Text style={styles.battleSubtext}>Find a study rival</Text>
+              <Text style={styles.battleSubtext}>
+                {rank.name} · {formatMatchLength(rank.matchSeconds)} match · {rank.bet} coins
+              </Text>
             </View>
             <ChevronRight size={22} color={T.primaryFg} strokeWidth={2.4} />
           </View>
@@ -279,9 +436,21 @@ export default function BattleLobby({ onMatchStart, onMatchmakingChange }: Battl
       </View>
 
       {phase === 'searching' && (
-        <SearchOverlay elapsed={elapsed} tip={TIPS[tipIndex]} onCancel={cancelSearching} />
+        <SearchOverlay
+          elapsed={elapsed}
+          tip={TIPS[tipIndex]}
+          fallback={elapsed >= CPU_FALLBACK_SECONDS}
+          onCancel={cancelSearching}
+        />
       )}
-      {phase === 'matchFound' && <MatchFoundOverlay player={player} onCountdown={onMatchStart} />}
+      {phase === 'matchFound' && rival && (
+        <MatchFoundOverlay
+          player={player}
+          opponent={rival}
+          cpu={vsCpu}
+          onCountdown={handleCountdown}
+        />
+      )}
     </View>
   );
 }
@@ -343,6 +512,9 @@ const styles = StyleSheet.create({
     paddingVertical: 9,
     borderRadius: RADIUS.full,
   },
+  arenaTierRow: { flexDirection: 'row', alignItems: 'center', gap: 7 },
+  arenaTierDot: { width: 9, height: 9, borderRadius: 5 },
+  arenaBadgeMeta: { fontFamily: T.fontMedium, fontSize: 11, color: T.muted },
   arenaBadgeText: {
     fontFamily: T.fontMedium,
     color: T.accentDeep,
@@ -351,6 +523,41 @@ const styles = StyleSheet.create({
     textTransform: 'uppercase',
   },
   arenaName: { fontFamily: T.fontDisplay, color: T.ink, fontSize: 15, marginTop: 2 },
+
+  rankHeader: {
+    flexDirection: 'row',
+    alignItems: 'baseline',
+    justifyContent: 'space-between',
+    marginBottom: 8,
+  },
+  rankHeaderLabel: {
+    fontFamily: T.fontMedium,
+    fontSize: 11,
+    letterSpacing: 1.1,
+    textTransform: 'uppercase',
+    color: T.muted,
+  },
+  rankHeaderHint: { fontFamily: T.font, fontSize: 11, color: T.muted },
+  rankRow: { gap: 8, paddingRight: 4 },
+  rankCard: {
+    width: 104,
+    alignItems: 'flex-start',
+    paddingVertical: 10,
+    paddingHorizontal: 11,
+    gap: 3,
+    borderRadius: RADIUS.lg,
+    borderWidth: 1,
+    borderColor: T.border,
+    backgroundColor: T.card,
+  },
+  rankCardLocked: { opacity: 0.5, backgroundColor: T.bgSunk },
+  rankTop: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  rankDot: { width: 8, height: 8, borderRadius: 4 },
+  rankName: { fontFamily: T.fontDisplay, fontSize: 14, color: T.ink },
+  rankMeta: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  rankMetaText: { fontFamily: T.fontMedium, fontSize: 12, color: T.inkSoft },
+  rankEntry: { fontFamily: T.font, fontSize: 10, color: T.muted, marginTop: 1 },
+  rankLocked: { fontFamily: T.fontMedium, fontSize: 11, color: T.danger },
 
   battleButton: { height: 70, paddingHorizontal: 0 },
   battleButtonContent: {

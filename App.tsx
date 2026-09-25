@@ -19,6 +19,8 @@ import BottomTabs, { type AppTab } from './components/BottomTabs';
 import CountdownOverlay from './components/CountdownOverlay';
 import { Tabs, TabsContent } from './components/ui/tabs';
 import { T } from './components/nova';
+import { type CpuOpponent } from './lib/cpuOpponent';
+import { type Rank } from './lib/ranks';
 
 export default function App() {
   const [fontsLoaded, fontError] = useFonts({
@@ -29,6 +31,10 @@ export default function App() {
   });
   const [activeTab, setActiveTab] = useState<AppTab>('battle');
   const [battleActive, setBattleActive] = useState(false);
+  // 이번 판의 상대. 매칭이 잡히는 순간 지어져서 타이머 화면까지 따라간다.
+  const [opponent, setOpponent] = useState<CpuOpponent | null>(null);
+  // 이번 판의 티어. 판 길이와 판돈을 타이머가 이걸로 읽는다.
+  const [rank, setRank] = useState<Rank | null>(null);
   // 매치 시작 카운트다운. 타이머 화면을 먼저 깔고 그 위에서 3-2-1 을 센다.
   const [countdown, setCountdown] = useState<number | null>(null);
   // 매칭을 건 순간부터 매치가 끝날 때까지 탭을 잠근다.
@@ -76,22 +82,30 @@ export default function App() {
               >
                 <StudyTimer
                   matchStarting={countdown !== null}
+                  opponent={opponent}
+                  rank={rank}
                   onFinished={() => {
                     setCountdown(null);
                     setMatchLocked(false);
                     setBattleActive(false);
+                    setOpponent(null);
+                    setRank(null);
                     setRefreshKey((k) => k + 1);
                   }}
                   onResign={() => {
                     setCountdown(null);
                     setMatchLocked(false);
                     setBattleActive(false);
+                    setOpponent(null);
+                    setRank(null);
                   }}
                 />
               </ScrollView>
             ) : (
               <BattleLobby
-                onMatchStart={() => {
+                onMatchStart={(rival, matchRank) => {
+                  setOpponent(rival);
+                  setRank(matchRank);
                   setBattleActive(true);
                   setCountdown(3);
                 }}
