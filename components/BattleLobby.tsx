@@ -10,12 +10,14 @@ import {
   View,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
-import { ChevronRight, Clock, Coins, Lock, Sprout, Swords, Trophy, X } from 'lucide-react-native';
+import { ChevronRight, Clock, Coins, Lock, Settings as SettingsIcon, Sprout, Swords, Trophy, X } from 'lucide-react-native';
 import Svg, { Circle, Ellipse, Path } from 'react-native-svg';
-import { Button, Card, RADIUS, T, elevation } from './nova';
-import { loadProfile, type Profile } from '../lib/auth';
+import { Button, Card, RADIUS, T, Tap, elevation } from './nova';
+import { type Profile } from '../lib/auth';
 import { createCpuOpponent, type CpuOpponent } from '../lib/cpuOpponent';
 import { formatMatchLength, highestUnlocked, isUnlocked, RANKS, type Rank } from '../lib/ranks';
+import { PLAYER_TROPHIES } from '../lib/wallet';
+import { useInventory } from '../lib/inventory';
 
 type BattlePhase = 'lobby' | 'searching' | 'matchFound';
 
@@ -24,6 +26,12 @@ type BattleLobbyProps = {
   onMatchStart: (opponent: CpuOpponent, rank: Rank) => void;
   /** 매칭을 걸었는지(=탭을 잠가야 하는지) 알린다. */
   onMatchmakingChange?: (searching: boolean) => void;
+  /** 프로필(아바타·이름)을 누르면 편집으로. */
+  onOpenProfile?: () => void;
+  /** 헤더 톱니를 누르면 설정으로. 하단 탭에서 내려온 자리다. */
+  onOpenSettings?: () => void;
+  /** 앱이 들고 있는 프로필. 편집하면 여기까지 바로 따라온다. */
+  profile?: Profile;
 };
 
 const TIPS = [
@@ -47,11 +55,6 @@ const CPU_MATCH_DEADLINE = 30;
  */
 const findRealOpponent = (): CpuOpponent | null => null;
 
-/** 유저 트로피. 프로필 저장이 붙기 전까지는 이 값이 기준점이다. */
-const PLAYER_TROPHIES = 2137;
-/** 가진 코인. 판돈을 못 내는 리그는 잠긴다. */
-const PLAYER_COINS = 480;
-
 function StatPill({
   icon: Icon,
   label,
@@ -65,13 +68,16 @@ function StatPill({
 }) {
   const fg = tone === 'amber' ? T.primaryDeep : T.accentDeep;
   const bg = tone === 'amber' ? T.primarySoft : T.accentSoft;
+  // 라벨 글자는 빼고 아이콘과 숫자만. 이름·칭호가 헤더에서 밀리지 않게.
+  // 무엇을 세는 값인지는 읽어 주는 이름으로 남긴다.
   return (
-    <View style={[styles.statPill, { backgroundColor: bg }]}>
-      <Icon size={15} color={fg} strokeWidth={2.2} />
-      <View>
-        <Text style={styles.statLabel}>{label}</Text>
-        <Text style={[styles.statValue, { color: fg }]}>{value}</Text>
-      </View>
+    <View
+      accessible
+      accessibilityLabel={`${label}: ${value}`}
+      style={[styles.statPill, { backgroundColor: bg }]}
+    >
+      <Icon size={16} color={fg} strokeWidth={2.2} />
+      <Text style={[styles.statValue, { color: fg }]}>{value}</Text>
     </View>
   );
 }
@@ -105,6 +111,7 @@ function ProfileStrip({
 /** 대결이 열리는 장소. 배지에는 지금 고른 티어가 뜬다. */
 function ArenaArt({ rank }: { rank: Rank }) {
   return (
+    <View style={styles.arenaWrap}>
     <Card level={2} radius={RADIUS.xl} style={styles.arenaFrame} boxStyle={styles.arenaBorder}>
       <LinearGradient colors={['#F7EFD9', '#FBF8F0', '#EDF0E2']} style={styles.arena}>
         <Svg width="100%" height="100%" viewBox="0 0 300 220" preserveAspectRatio="xMidYMid slice">
@@ -129,18 +136,21 @@ function ArenaArt({ rank }: { rank: Rank }) {
           <Ellipse cx={244} cy={192} rx={30} ry={17} fill="#C7D3AC" />
         </Svg>
 
-        <View style={styles.arenaBadge}>
-          <View style={styles.arenaTierRow}>
-            <View style={[styles.arenaTierDot, { backgroundColor: rank.color }]} />
-            <Text style={[styles.arenaBadgeText, { color: rank.color }]}>{rank.name}</Text>
-            <Text style={styles.arenaBadgeMeta}>
-              {formatMatchLength(rank.matchSeconds)} · {rank.bet} coins
-            </Text>
-          </View>
-          <Text style={styles.arenaName}>{rank.blurb}</Text>
-        </View>
       </LinearGradient>
     </Card>
+
+    {/* 고른 티어는 그림 아래에 적는다. 예전엔 그림 위에 얹혀 정원 문을 가렸다. */}
+    <View style={styles.arenaCaption}>
+      <View style={styles.arenaTierRow}>
+        <View style={[styles.arenaTierDot, { backgroundColor: rank.color }]} />
+        <Text style={[styles.arenaBadgeText, { color: rank.color }]}>{rank.name}</Text>
+        <Text style={styles.arenaBadgeMeta}>
+          {formatMatchLength(rank.matchSeconds)} · {rank.bet} coins
+        </Text>
+      </View>
+      <Text style={styles.arenaName} numberOfLines={1}>{rank.blurb}</Text>
+    </View>
+    </View>
   );
 }
 
@@ -308,21 +318,24 @@ function MatchFoundOverlay({
   );
 }
 
-export default function BattleLobby({ onMatchStart, onMatchmakingChange }: BattleLobbyProps) {
+export default function BattleLobby({
+  onMatchStart,
+  onMatchmakingChange,
+  onOpenProfile,
+  onOpenSettings,
+  profile,
+}: BattleLobbyProps) {
   const [phase, setPhase] = useState<BattlePhase>('lobby');
   const [elapsed, setElapsed] = useState(0);
   const [tipIndex, setTipIndex] = useState(0);
   const [vsCpu, setVsCpu] = useState(false);
   const [rival, setRival] = useState<CpuOpponent | null>(null);
   // 지갑이 감당하는 가장 높은 티어에서 시작한다.
-  const [rank, setRank] = useState<Rank>(highestUnlocked(PLAYER_COINS));
-  const [profile, setProfile] = useState<Profile>({ name: 'Focus Knight', avatar: '🦉' });
+  // 지갑은 상점과 같은 저장소를 본다 — 산 만큼 줄고, 그만큼 설 수 있는 티어도 달라진다.
+  const { inv } = useInventory();
+  const coins = inv.coins;
+  const [rank, setRank] = useState<Rank>(highestUnlocked(coins));
 
-  useEffect(() => {
-    loadProfile().then((saved) => {
-      if (saved) setProfile(saved);
-    });
-  }, []);
 
   useEffect(() => {
     if (phase !== 'searching') return;
@@ -377,36 +390,50 @@ export default function BattleLobby({ onMatchStart, onMatchmakingChange }: Battl
   }, [onMatchStart, rank, rival]);
 
   const player = {
-    name: profile.name || 'Focus Knight',
-    avatar: profile.avatar || '🦉',
+    name: profile?.name?.trim() || 'Focus Knight',
+    avatar: profile?.avatar || '🦉',
     trophies: PLAYER_TROPHIES,
-    title: profile.title || 'Night Scholar',
+    title: profile?.title?.trim() || 'Night Scholar',
   };
 
   return (
     <View style={styles.screen}>
       <View style={styles.header}>
-        <View style={styles.playerIdentity}>
+        <Tap
+          onPress={onOpenProfile}
+          accessibilityLabel="Edit your profile"
+          style={styles.playerIdentity}
+        >
           <View style={styles.headerAvatar}>
             <Text style={styles.headerAvatarText}>{player.avatar}</Text>
           </View>
           <View style={styles.headerCopy}>
-            <Text style={styles.levelLabel}>Level 18</Text>
+            <Text style={styles.levelLabel} numberOfLines={1}>
+              {player.title}
+            </Text>
             <Text style={styles.headerName} numberOfLines={1}>
               {player.name}
             </Text>
           </View>
-        </View>
+        </Tap>
         <View style={styles.headerStats}>
           <StatPill icon={Trophy} label="Trophies" value={PLAYER_TROPHIES.toLocaleString()} tone="amber" />
-          <StatPill icon={Coins} label="Coins" value={PLAYER_COINS.toLocaleString()} tone="olive" />
+          <StatPill icon={Coins} label="Coins" value={coins.toLocaleString()} tone="olive" />
+          <Tap
+            onPress={onOpenSettings}
+            accessibilityLabel="Settings"
+            hitSlop={8}
+            style={styles.gear}
+          >
+            <SettingsIcon size={21} color={T.muted} strokeWidth={2} />
+          </Tap>
         </View>
       </View>
 
       <View style={styles.content}>
         <ArenaArt rank={rank} />
 
-        <RankPicker selected={rank} coins={PLAYER_COINS} onSelect={setRank} />
+        <RankPicker selected={rank} coins={coins} onSelect={setRank} />
 
         <Button
           block
@@ -476,53 +503,47 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     marginRight: 10,
   },
-  headerAvatarText: { fontSize: 24 },
+  headerAvatarText: { fontSize: 27 },
   headerCopy: { flex: 1 },
   levelLabel: {
+    flexShrink: 1,
     fontFamily: T.fontMedium,
     color: T.muted,
-    fontSize: 11,
-    letterSpacing: 0.9,
+    fontSize: 12,
+    letterSpacing: 0.6,
     textTransform: 'uppercase',
   },
-  headerName: { fontFamily: T.fontDisplay, color: T.ink, fontSize: 18, marginTop: 1 },
-  headerStats: { flexDirection: 'row', gap: 8 },
+  headerName: { fontFamily: T.fontDisplay, color: T.ink, fontSize: 20, marginTop: 1 },
+  headerStats: { flexDirection: 'row', alignItems: 'center', gap: 6, flexShrink: 0 },
+  gear: { padding: 4, marginLeft: 2 },
   statPill: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 7,
+    flexShrink: 0,
+    gap: 6,
     paddingHorizontal: 10,
-    paddingVertical: 7,
+    paddingVertical: 8,
     borderRadius: RADIUS.md,
   },
-  statLabel: { color: T.muted, fontFamily: T.font, fontSize: 10 },
-  statValue: { fontFamily: T.fontBold, fontSize: 13 },
+  statValue: { fontFamily: T.fontBold, fontSize: 15 },
 
   content: { flex: 1, paddingHorizontal: 16, justifyContent: 'space-between', paddingBottom: 10, gap: 16 },
-  arenaFrame: { flex: 1, minHeight: 250, maxHeight: 380 },
+  arenaWrap: { flex: 1, minHeight: 250, maxHeight: 400, gap: 10 },
+  arenaFrame: { flex: 1 },
   arenaBorder: { flex: 1, padding: 0 },
   arena: { flex: 1, justifyContent: 'flex-end' },
-  arenaBadge: {
-    position: 'absolute',
-    bottom: 14,
-    alignSelf: 'center',
-    alignItems: 'center',
-    backgroundColor: 'rgba(255,255,255,0.86)',
-    paddingHorizontal: 16,
-    paddingVertical: 9,
-    borderRadius: RADIUS.full,
-  },
+  arenaCaption: { alignItems: 'center', gap: 2 },
   arenaTierRow: { flexDirection: 'row', alignItems: 'center', gap: 7 },
   arenaTierDot: { width: 9, height: 9, borderRadius: 5 },
-  arenaBadgeMeta: { fontFamily: T.fontMedium, fontSize: 11, color: T.muted },
+  arenaBadgeMeta: { fontFamily: T.fontMedium, fontSize: 13, color: T.muted },
   arenaBadgeText: {
     fontFamily: T.fontMedium,
     color: T.accentDeep,
-    fontSize: 10,
+    fontSize: 12,
     letterSpacing: 1.2,
     textTransform: 'uppercase',
   },
-  arenaName: { fontFamily: T.fontDisplay, color: T.ink, fontSize: 15, marginTop: 2 },
+  arenaName: { fontFamily: T.fontDisplay, color: T.ink, fontSize: 15, marginTop: 2, textAlign: 'center' },
 
   rankHeader: {
     flexDirection: 'row',
@@ -532,12 +553,12 @@ const styles = StyleSheet.create({
   },
   rankHeaderLabel: {
     fontFamily: T.fontMedium,
-    fontSize: 11,
+    fontSize: 13,
     letterSpacing: 1.1,
     textTransform: 'uppercase',
     color: T.muted,
   },
-  rankHeaderHint: { fontFamily: T.font, fontSize: 11, color: T.muted },
+  rankHeaderHint: { fontFamily: T.font, fontSize: 13, color: T.muted },
   rankRow: { gap: 8, paddingRight: 4 },
   rankCard: {
     width: 104,
@@ -553,11 +574,11 @@ const styles = StyleSheet.create({
   rankCardLocked: { opacity: 0.5, backgroundColor: T.bgSunk },
   rankTop: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   rankDot: { width: 8, height: 8, borderRadius: 4 },
-  rankName: { fontFamily: T.fontDisplay, fontSize: 14, color: T.ink },
+  rankName: { fontFamily: T.fontDisplay, fontSize: 16, color: T.ink },
   rankMeta: { flexDirection: 'row', alignItems: 'center', gap: 4 },
-  rankMetaText: { fontFamily: T.fontMedium, fontSize: 12, color: T.inkSoft },
-  rankEntry: { fontFamily: T.font, fontSize: 10, color: T.muted, marginTop: 1 },
-  rankLocked: { fontFamily: T.fontMedium, fontSize: 11, color: T.danger },
+  rankMetaText: { fontFamily: T.fontMedium, fontSize: 14, color: T.inkSoft },
+  rankEntry: { fontFamily: T.font, fontSize: 12, color: T.muted, marginTop: 1 },
+  rankLocked: { fontFamily: T.fontMedium, fontSize: 13, color: T.danger },
 
   battleButton: { height: 70, paddingHorizontal: 0 },
   battleButtonContent: {
@@ -577,11 +598,11 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(255,255,255,0.18)',
   },
   battleCopy: { flex: 1 },
-  battleText: { fontFamily: T.fontDisplay, fontSize: 22, color: T.primaryFg },
-  battleSubtext: { fontFamily: T.font, fontSize: 12, color: 'rgba(255,252,244,0.82)', marginTop: 1 },
+  battleText: { fontFamily: T.fontDisplay, fontSize: 25, color: T.primaryFg },
+  battleSubtext: { fontFamily: T.font, fontSize: 14, color: 'rgba(255,252,244,0.82)', marginTop: 1 },
 
   footnote: { flexDirection: 'row', alignItems: 'center', gap: 7, justifyContent: 'center' },
-  footnoteText: { fontFamily: T.font, fontSize: 12, color: T.muted },
+  footnoteText: { fontFamily: T.font, fontSize: 14, color: T.muted },
 
   overlay: {
     ...StyleSheet.absoluteFill,
@@ -595,24 +616,24 @@ const styles = StyleSheet.create({
   searchEyebrow: {
     fontFamily: T.fontMedium,
     color: T.muted,
-    fontSize: 12,
+    fontSize: 14,
     letterSpacing: 1.3,
     textTransform: 'uppercase',
     marginTop: 22,
   },
-  searchTime: { fontFamily: T.fontDisplay, color: T.primaryDeep, fontSize: 38, marginTop: 10 },
-  searchCopy: { fontFamily: T.font, color: T.muted, fontSize: 13, marginTop: 8 },
+  searchTime: { fontFamily: T.fontDisplay, color: T.primaryDeep, fontSize: 42, marginTop: 10 },
+  searchCopy: { fontFamily: T.font, color: T.muted, fontSize: 15, marginTop: 8 },
   cancelButton: { marginTop: 24, alignSelf: 'center' },
-  cancelText: { fontFamily: T.fontMedium, fontSize: 15, color: T.inkSoft },
+  cancelText: { fontFamily: T.fontMedium, fontSize: 17, color: T.inkSoft },
   tipBox: { position: 'absolute', bottom: 28, left: 24, right: 24, alignItems: 'center' },
   tipLabel: {
     fontFamily: T.fontMedium,
-    fontSize: 10,
+    fontSize: 12,
     letterSpacing: 1.3,
     textTransform: 'uppercase',
     color: T.accent,
   },
-  tipText: { fontFamily: T.font, fontSize: 13, color: T.muted, marginTop: 7, textAlign: 'center' },
+  tipText: { fontFamily: T.font, fontSize: 15, color: T.muted, marginTop: 7, textAlign: 'center' },
 
   vsOverlay: { ...StyleSheet.absoluteFill, backgroundColor: T.bg, overflow: 'hidden' },
   vsHalf: { position: 'absolute', left: 0, right: 0, height: '50%', paddingHorizontal: 20, justifyContent: 'center' },
@@ -621,7 +642,7 @@ const styles = StyleSheet.create({
   vsCaption: {
     fontFamily: T.fontMedium,
     color: T.muted,
-    fontSize: 11,
+    fontSize: 13,
     letterSpacing: 1.3,
     textTransform: 'uppercase',
     marginBottom: 10,
@@ -636,18 +657,18 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  avatar: { fontSize: 26 },
+  avatar: { fontSize: 29 },
   profileCopy: { flex: 1, marginLeft: 12 },
   profileTitle: {
     fontFamily: T.fontMedium,
     color: T.muted,
-    fontSize: 10,
+    fontSize: 12,
     letterSpacing: 1,
     textTransform: 'uppercase',
   },
-  profileName: { fontFamily: T.fontDisplay, color: T.ink, fontSize: 17, marginTop: 2 },
+  profileName: { fontFamily: T.fontDisplay, color: T.ink, fontSize: 19, marginTop: 2 },
   trophyMini: { alignItems: 'center', gap: 3 },
-  trophyText: { fontFamily: T.fontMedium, color: T.primaryDeep, fontSize: 13 },
+  trophyText: { fontFamily: T.fontMedium, color: T.primaryDeep, fontSize: 15 },
   vsBadge: {
     position: 'absolute',
     top: '44%',
@@ -661,5 +682,5 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     ...elevation(3),
   },
-  vsText: { fontFamily: T.fontDisplay, color: T.primaryDeep, fontSize: 28, letterSpacing: 1 },
+  vsText: { fontFamily: T.fontDisplay, color: T.primaryDeep, fontSize: 31, letterSpacing: 1 },
 });

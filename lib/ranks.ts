@@ -25,6 +25,8 @@ export type Rank = {
   bet: number;
   /** 이 티어에서 뛰려면 지갑에 최소 이만큼은 있어야 한다. */
   minCoins: number;
+  /** ROLL 로 얻는 휴식 보상의 기준 분. 판이 길수록 한 번에 더 크게 쉰다. */
+  breakMinutes: number;
   /** 티어 색. 뱃지와 선택 테두리에 쓴다. */
   color: string;
   blurb: string;
@@ -32,18 +34,19 @@ export type Rank = {
 
 const M = 60;
 
-// 판 길이는 30분에서 시작해 5시간(최상위)까지. 5시간이 한 판의 상한이다.
+// 판 길이는 15분에서 6시간 30분까지. 티어가 오를수록 간격이 넓어진다 —
+// 아래쪽은 가볍게 들어오고, 위쪽은 한 칸 올라가는 게 확실히 무겁게.
 export const RANKS: readonly Rank[] = [
-  { id: 'iron', name: 'Iron', matchSeconds: 30 * M, bet: 5, minCoins: 0, color: '#6F6F68', blurb: 'Half an hour. Just sit down.' },
-  { id: 'bronze', name: 'Bronze', matchSeconds: 60 * M, bet: 10, minCoins: 50, color: '#9C6B43', blurb: 'One hour, one sitting.' },
-  { id: 'silver', name: 'Silver', matchSeconds: 90 * M, bet: 20, minCoins: 150, color: '#8A9099', blurb: 'Ninety minutes. One break allowed.' },
-  { id: 'gold', name: 'Gold', matchSeconds: 120 * M, bet: 40, minCoins: 300, color: '#B5822B', blurb: 'Two hours. The usual study block.' },
-  { id: 'platinum', name: 'Platinum', matchSeconds: 150 * M, bet: 70, minCoins: 600, color: '#4E8C86', blurb: 'Two and a half hours of real focus.' },
-  { id: 'emerald', name: 'Emerald', matchSeconds: 180 * M, bet: 110, minCoins: 1000, color: '#3F7A4A', blurb: 'Three hours. Pace yourself.' },
-  { id: 'diamond', name: 'Diamond', matchSeconds: 210 * M, bet: 170, minCoins: 1800, color: '#3D6EA8', blurb: 'Three and a half hours. Few last it.' },
-  { id: 'master', name: 'Master', matchSeconds: 240 * M, bet: 250, minCoins: 3000, color: '#6E4E9E', blurb: 'Four hours. Breaks are a strategy now.' },
-  { id: 'grandmaster', name: 'Grandmaster', matchSeconds: 270 * M, bet: 400, minCoins: 5000, color: '#A2492F', blurb: 'Four and a half hours. Bring water.' },
-  { id: 'challenger', name: 'Challenger', matchSeconds: 300 * M, bet: 600, minCoins: 8000, color: '#D97706', blurb: 'Five hours — the longest match there is.' },
+  { id: 'iron', name: 'Iron', matchSeconds: 15 * M, bet: 5, minCoins: 0, breakMinutes: 4, color: '#6F6F68', blurb: 'Fifteen minutes. Just sit down.' },
+  { id: 'bronze', name: 'Bronze', matchSeconds: 30 * M, bet: 15, minCoins: 60, breakMinutes: 6, color: '#9C6B43', blurb: 'Half an hour, one sitting.' },
+  { id: 'silver', name: 'Silver', matchSeconds: 50 * M, bet: 35, minCoins: 180, breakMinutes: 9, color: '#8A9099', blurb: 'Fifty minutes. No break needed.' },
+  { id: 'gold', name: 'Gold', matchSeconds: 75 * M, bet: 70, minCoins: 400, breakMinutes: 12, color: '#B5822B', blurb: 'An hour and a quarter — the usual block.' },
+  { id: 'platinum', name: 'Platinum', matchSeconds: 105 * M, bet: 130, minCoins: 800, breakMinutes: 16, color: '#4E8C86', blurb: 'Nearly two hours of real focus.' },
+  { id: 'emerald', name: 'Emerald', matchSeconds: 145 * M, bet: 230, minCoins: 1500, breakMinutes: 21, color: '#3F7A4A', blurb: 'Two and a half hours. Pace yourself.' },
+  { id: 'diamond', name: 'Diamond', matchSeconds: 195 * M, bet: 400, minCoins: 2800, breakMinutes: 27, color: '#3D6EA8', blurb: 'Over three hours. Few last it.' },
+  { id: 'master', name: 'Master', matchSeconds: 255 * M, bet: 700, minCoins: 5000, breakMinutes: 34, color: '#6E4E9E', blurb: 'Four and a quarter hours. Breaks are a strategy now.' },
+  { id: 'grandmaster', name: 'Grandmaster', matchSeconds: 320 * M, bet: 1200, minCoins: 9000, breakMinutes: 42, color: '#A2492F', blurb: 'Five hours and twenty. Bring water.' },
+  { id: 'challenger', name: 'Challenger', matchSeconds: 390 * M, bet: 2000, minCoins: 15000, breakMinutes: 55, color: '#D97706', blurb: 'Six and a half hours — the longest match there is.' },
 ];
 
 export const rankById = (id: RankId): Rank => RANKS.find((rank) => rank.id === id) ?? RANKS[0];

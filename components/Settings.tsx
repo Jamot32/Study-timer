@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
-import { Button, Card, RADIUS, T } from '@/components/nova';
+import { ScrollView, StyleSheet, Text, View } from 'react-native';
+import { ArrowLeft } from 'lucide-react-native';
+import { Button, Card, RADIUS, T, Tap } from '@/components/nova';
 import { confirmDestructive } from '@/lib/confirm';
 import { clearProfile, type Profile } from '@/lib/auth';
 import { Avatar } from '@/components/Avatar';
@@ -26,16 +27,11 @@ function Segmented<T_ extends string | number>({
       {choices.map((choice) => {
         const selected = choice.value === value;
         return (
-          <Pressable
+          <Tap
             key={String(choice.value)}
-            accessibilityRole="button"
             accessibilityState={{ selected }}
             onPress={() => onChange(choice.value)}
-            style={({ pressed }) => [
-              styles.segment,
-              selected && styles.segmentSelected,
-              pressed && { opacity: 0.7 },
-            ]}
+            style={[styles.segment, selected ? styles.segmentSelected : null]}
           >
             <Text
               style={[styles.segmentLabel, selected && styles.segmentLabelSelected]}
@@ -43,7 +39,7 @@ function Segmented<T_ extends string | number>({
             >
               {choice.label}
             </Text>
-          </Pressable>
+          </Tap>
         );
       })}
     </View>
@@ -53,6 +49,8 @@ function Segmented<T_ extends string | number>({
 export interface SettingsProps {
   /** Called after a change that the dashboard's numbers depend on. */
   onChanged?: () => void;
+  /** 배틀 화면에서 열렸을 때 돌아가는 길. */
+  onBack?: () => void;
   /** Back to the timer. */
   /** The signed-in (local) profile. */
   profile?: Profile;
@@ -64,6 +62,7 @@ export interface SettingsProps {
 
 export default function Settings({
   onChanged,
+  onBack,
   profile,
   onEditProfile,
   onSignOut,
@@ -109,11 +108,24 @@ export default function Settings({
       showsVerticalScrollIndicator={false}
     >
       <View style={styles.body}>
-        <View style={styles.headerText}>
-          <Text style={styles.title} accessibilityRole="header">
-            Settings
-          </Text>
-          <Text style={styles.subtitle}>Week boundary, profile and stored history.</Text>
+        <View style={styles.headerRow}>
+          {onBack ? (
+            <Button
+              size="icon"
+              variant="ghost"
+              onPress={onBack}
+              accessibilityLabel="Back"
+              style={styles.backBtn}
+            >
+              <ArrowLeft size={21} color={T.inkSoft} />
+            </Button>
+          ) : null}
+          <View style={styles.headerText}>
+            <Text style={styles.title} accessibilityRole="header">
+              Settings
+            </Text>
+            <Text style={styles.subtitle}>Week boundary, profile and stored history.</Text>
+          </View>
         </View>
 
         <Card level={1} boxStyle={styles.card}>
@@ -174,14 +186,16 @@ export default function Settings({
 
 const styles = StyleSheet.create({
   screen: { flex: 1, width: '100%', backgroundColor: T.bg, paddingHorizontal: 16, paddingTop: 8 },
+  headerRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   headerText: { flex: 1 },
+  backBtn: { marginLeft: -10 },
   body: { gap: 16 },
-  title: { fontFamily: T.fontDisplay, fontSize: 28, color: T.ink, letterSpacing: -0.4 },
-  subtitle: { fontFamily: T.font, fontSize: 14, color: T.muted, marginTop: 4 },
+  title: { fontFamily: T.fontDisplay, fontSize: 31, color: T.ink, letterSpacing: -0.4 },
+  subtitle: { fontFamily: T.font, fontSize: 16, color: T.muted, marginTop: 4 },
 
   card: { padding: 18 },
-  cardTitle: { fontFamily: T.fontMedium, fontSize: 16, color: T.ink },
-  cardDesc: { fontFamily: T.font, fontSize: 13, lineHeight: 20, color: T.muted, marginTop: 6 },
+  cardTitle: { fontFamily: T.fontMedium, fontSize: 18, color: T.ink },
+  cardDesc: { fontFamily: T.font, fontSize: 15, lineHeight: 20, color: T.muted, marginTop: 6 },
 
   // 트랙 안에서 알약이 미끄러지는 세그먼트. 테두리 대신 면으로 선택을 보인다.
   segmented: {
@@ -200,19 +214,19 @@ const styles = StyleSheet.create({
     borderRadius: RADIUS.sm,
   },
   segmentSelected: { backgroundColor: T.card },
-  segmentLabel: { fontFamily: T.fontMedium, fontSize: 14, color: T.muted },
+  segmentLabel: { fontFamily: T.fontMedium, fontSize: 16, color: T.muted },
   segmentLabelSelected: { color: T.ink },
 
   previewRow: { flexDirection: 'row', alignItems: 'center', gap: 14, marginTop: 16 },
   previewText: { flex: 1 },
   previewTitle: {
     fontFamily: T.fontMedium,
-    fontSize: 11,
+    fontSize: 13,
     letterSpacing: 1,
     textTransform: 'uppercase',
     color: T.muted,
   },
-  previewName: { fontFamily: T.fontDisplay, fontSize: 19, color: T.ink, marginTop: 4 },
+  previewName: { fontFamily: T.fontDisplay, fontSize: 21, color: T.ink, marginTop: 4 },
 
   actionGap: { marginTop: 12 },
 });

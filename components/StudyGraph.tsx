@@ -107,8 +107,8 @@ export default function StudyGraph({ sessions, weekStartsOn }: StudyGraphProps) 
 const styles = StyleSheet.create({
   wrap: { gap: 10 },
   headerRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  title: { fontFamily: T.fontMedium, fontSize: 15, color: T.ink },
-  caption: { fontFamily: T.font, fontSize: 12, color: T.muted },
+  title: { fontFamily: T.fontMedium, fontSize: 17, color: T.ink },
+  caption: { fontFamily: T.font, fontSize: 14, color: T.muted },
   grid: { flexDirection: 'row', gap: 3, padding: 8 },
   week: { flex: 1, gap: 3 },
   cell: { aspectRatio: 1, borderRadius: 3 },

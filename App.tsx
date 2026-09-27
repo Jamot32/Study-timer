@@ -15,11 +15,14 @@ import PageRoll from './components/PageRoll';
 import RankBoard from './components/RankBoard';
 import StudyTimer from './components/StudyTimer';
 import Settings from './components/Settings';
+import Shop from './components/Shop';
+import ProfileEdit from './components/ProfileEdit';
 import BottomTabs, { type AppTab } from './components/BottomTabs';
 import CountdownOverlay from './components/CountdownOverlay';
 import { Tabs, TabsContent } from './components/ui/tabs';
 import { T } from './components/nova';
 import { type CpuOpponent } from './lib/cpuOpponent';
+import { loadProfile, normalizeProfile, type Profile } from './lib/auth';
 import { type Rank } from './lib/ranks';
 
 export default function App() {
@@ -43,6 +46,15 @@ export default function App() {
   // ROLL 이 책을 펼치면 탭 바까지 치운다. 책만 보이게.
   const [rollFocused, setRollFocused] = useState(false);
   const onRollFocus = useCallback((f: boolean) => setRollFocused(f), []);
+  // 설정과 프로필 편집은 탭이 아니라 배틀 화면 위에 얹힌다.
+  const [battlePane, setBattlePane] = useState<'lobby' | 'settings' | 'profile'>('lobby');
+  const [profile, setProfile] = useState<Profile>(normalizeProfile({ name: 'Guest' }));
+
+  useEffect(() => {
+    loadProfile().then((saved) => {
+      if (saved) setProfile(saved);
+    });
+  }, []);
 
   useEffect(() => {
     if (countdown === null) return;
@@ -75,12 +87,26 @@ export default function App() {
           </TabsContent>
 
           <TabsContent value="battle" className="flex-1">
-            {battleActive ? (
+            {battlePane === 'settings' ? (
+              <Settings
+                onBack={() => setBattlePane('lobby')}
+                onChanged={() => setRefreshKey((k) => k + 1)}
+                profile={profile}
+                onEditProfile={() => setBattlePane('profile')}
+              />
+            ) : battlePane === 'profile' ? (
+              <ProfileEdit
+                profile={profile}
+                onProfileChanged={setProfile}
+                onBack={() => setBattlePane('lobby')}
+              />
+            ) : battleActive ? (
               <ScrollView
                 contentContainerStyle={styles.timerScroll}
                 showsVerticalScrollIndicator={false}
               >
                 <StudyTimer
+                  profile={profile}
                   matchStarting={countdown !== null}
                   opponent={opponent}
                   rank={rank}
@@ -110,6 +136,9 @@ export default function App() {
                   setCountdown(3);
                 }}
                 onMatchmakingChange={setMatchLocked}
+                profile={profile}
+                onOpenProfile={() => setBattlePane('profile')}
+                onOpenSettings={() => setBattlePane('settings')}
               />
             )}
           </TabsContent>
@@ -118,13 +147,14 @@ export default function App() {
             <RankBoard />
           </TabsContent>
 
-          <TabsContent value="settings" className="flex-1 w-full max-w-lg mx-auto">
-            <Settings onChanged={() => setRefreshKey((k) => k + 1)} />
+          <TabsContent value="shop" className="flex-1 w-full max-w-lg mx-auto">
+            <Shop />
           </TabsContent>
 
         </Tabs>
 
-        {/* 모든 화면이 같은 하단 탭 바를 쓴다 — ROLL / STAT / BATTLE / RANK / SETTING. */}
+        {/* 모든 화면이 같은 하단 탭 바를 쓴다 — ROLL / STATS / BATTLE / RANK / SHOP.
+            설정과 프로필은 배틀 화면 헤더에서 연다. */}
         {showTabs && (
           <View style={styles.tabBar}>
             <BottomTabs activeTab={activeTab} onSelect={setActiveTab} locked={matchLocked} />

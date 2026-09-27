@@ -14,5 +14,5 @@ export default function Loading() {
 
 const styles = StyleSheet.create({
   screen: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 16, backgroundColor: T.bg },
-  label: { fontSize: 14, letterSpacing: 0.4, color: T.muted, fontWeight: '500' },
+  label: { fontSize: 16, letterSpacing: 0.4, color: T.muted, fontWeight: '500' },
 });
