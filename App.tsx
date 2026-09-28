@@ -5,6 +5,7 @@ import {
   DMSans_700Bold,
 } from '@expo-google-fonts/dm-sans';
 import { Fraunces_600SemiBold } from '@expo-google-fonts/fraunces';
+import { PressStart2P_400Regular } from '@expo-google-fonts/press-start-2p';
 import { StatusBar } from 'expo-status-bar';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { ScrollView, StyleSheet, View } from 'react-native';
@@ -37,6 +38,7 @@ export default function App() {
     DMSans_500Medium,
     DMSans_700Bold,
     Fraunces_600SemiBold,
+    PressStart2P_400Regular,
   });
   const [activeTab, setActiveTab] = useState<AppTab>('battle');
   const [battleActive, setBattleActive] = useState(false);
@@ -222,6 +224,7 @@ export default function App() {
               >
                 <StudyTimer
                   profile={profile}
+                  refreshKey={refreshKey}
                   matchStarting={countdown !== null}
                   opponent={opponent}
                   arena={arena}

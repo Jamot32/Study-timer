@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { StyleSheet, Text, TextInput, View } from 'react-native';
 import { Button, Card, RADIUS, T } from '@/components/nova';
-import { saveProfile, type Profile } from '@/lib/auth';
+import { NAME_MAX, saveProfile, type Profile } from '@/lib/auth';
 
 export default function Login({ onLoggedIn }: { onLoggedIn: (profile: Profile) => void }) {
   const [name, setName] = useState('');
@@ -30,7 +30,7 @@ export default function Login({ onLoggedIn }: { onLoggedIn: (profile: Profile) =
             placeholder="Your name"
             placeholderTextColor={T.muted}
             autoFocus
-            maxLength={20}
+            maxLength={NAME_MAX}
             returnKeyType="go"
             accessibilityLabel="Your name"
             style={[styles.input, focused && styles.inputFocused]}
