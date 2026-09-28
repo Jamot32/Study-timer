@@ -165,10 +165,10 @@ const VARIANT: Record<ButtonVariant, { bg: string; fg: string; border?: string; 
 };
 
 const SIZE: Record<ButtonSize, { h: number; px: number; fs: number; radius: number }> = {
-  sm: { h: 36, px: 14, fs: 13, radius: RADIUS.md },
-  md: { h: 46, px: 20, fs: 15, radius: RADIUS.md },
-  lg: { h: 56, px: 26, fs: 17, radius: RADIUS.lg },
-  icon: { h: 42, px: 0, fs: 15, radius: RADIUS.md },
+  sm: { h: 40, px: 16, fs: 15, radius: RADIUS.md },
+  md: { h: 50, px: 22, fs: 17, radius: RADIUS.md },
+  lg: { h: 60, px: 28, fs: 19, radius: RADIUS.lg },
+  icon: { h: 46, px: 0, fs: 17, radius: RADIUS.md },
 };
 
 /** children 이 글자(문자열·숫자)로만 이뤄졌는지. 섞여 있으면 false. */
@@ -249,17 +249,70 @@ export function ButtonText({ style, children }: { style?: StyleProp<TextStyle>; 
   return <Text style={[styles.buttonLabel, { color }, style]}>{children}</Text>;
 }
 
+// ---------- Tap ----------
+
+type TapProps = {
+  onPress?: () => void;
+  disabled?: boolean;
+  style?: StyleProp<ViewStyle>;
+  /** 눌렸을 때 덧입히는 스타일. 없으면 살짝 흐려진다. */
+  pressedStyle?: StyleProp<ViewStyle>;
+  accessibilityRole?: 'button' | 'tab';
+  accessibilityLabel?: string;
+  accessibilityState?: { selected?: boolean; disabled?: boolean };
+  hitSlop?: number;
+  children?: React.ReactNode;
+};
+
+/**
+ * 누를 수 있는 면. Pressable 을 쓰되 style 은 **배열로만** 넘긴다.
+ * style 을 함수(({pressed}) => ...)로 넘기면 이 RN 버전 iOS 에서 스타일이
+ * 통째로 유실된다 — 배경이 안 칠해지거나 flex 가 먹히지 않아 글자 칸이 0 이 된다.
+ * 웹(react-native-web)에서는 멀쩡해서 더 늦게 드러난다.
+ */
+export function Tap({
+  onPress,
+  disabled,
+  style,
+  pressedStyle,
+  accessibilityRole = 'button',
+  accessibilityLabel,
+  accessibilityState,
+  hitSlop,
+  children,
+}: TapProps) {
+  const [pressed, setPressed] = React.useState(false);
+  return (
+    <Pressable
+      onPress={onPress}
+      disabled={disabled}
+      onPressIn={() => setPressed(true)}
+      onPressOut={() => setPressed(false)}
+      accessibilityRole={accessibilityRole}
+      accessibilityLabel={accessibilityLabel}
+      accessibilityState={accessibilityState}
+      hitSlop={hitSlop}
+      style={[style, pressed && !disabled ? (pressedStyle ?? styles.tapPressed) : null]}
+    >
+      {children}
+    </Pressable>
+  );
+}
+
 // ---------- Progress ----------
 
 export function ProgressBar({
   value,
   tone = 'primary',
   height = 10,
+  color,
 }: {
   /** 0–1 */
   value: number;
   tone?: 'primary' | 'accent';
   height?: number;
+  /** tone 을 무시하고 이 색으로 채운다. 단계마다 색이 바뀌는 게이지용. */
+  color?: string;
 }) {
   const pct = Math.max(0, Math.min(1, value));
   return (
@@ -273,7 +326,7 @@ export function ProgressBar({
           height: '100%',
           width: `${pct * 100}%`,
           borderRadius: height / 2,
-          backgroundColor: tone === 'accent' ? T.accent : T.primary,
+          backgroundColor: color ?? (tone === 'accent' ? T.accent : T.primary),
         }}
       />
     </View>
@@ -333,6 +386,7 @@ const styles = StyleSheet.create({
     fontFamily: T.fontMedium,
     letterSpacing: 0.2,
   },
+  tapPressed: { opacity: 0.6 },
   progressTrack: {
     width: '100%',
     backgroundColor: T.bgSunk,
@@ -340,19 +394,19 @@ const styles = StyleSheet.create({
   },
   title: {
     fontFamily: T.fontDisplay,
-    fontSize: 22,
+    fontSize: 25,
     color: T.ink,
     letterSpacing: -0.2,
   },
   subtitle: {
     fontFamily: T.font,
-    fontSize: 14,
+    fontSize: 16,
     color: T.muted,
     lineHeight: 20,
   },
   label: {
     fontFamily: T.fontMedium,
-    fontSize: 11,
+    fontSize: 13,
     letterSpacing: 1.1,
     textTransform: 'uppercase',
     color: T.muted,
@@ -365,7 +419,7 @@ const styles = StyleSheet.create({
   },
   chipText: {
     fontFamily: T.fontMedium,
-    fontSize: 12,
+    fontSize: 14,
     letterSpacing: 0.2,
   },
   divider: {

@@ -1,8 +1,11 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { StyleSheet, Text, View } from 'react-native'
 import Svg, { G, Line, Polygon, Text as SvgText } from 'react-native-svg'
-import { Button, Card, RADIUS, T } from '@/components/nova'
+import { Button, RADIUS, T } from '@/components/nova'
 import { QUOTES } from '@/components/quotes'
+import { arenaById, type Arena } from '@/lib/arena'
+import { COUPONS, jackpotCoins, type Coupon } from '@/lib/coupons'
+import { useInventory } from '@/lib/inventory'
 
 // ============================================================
 // PAGE ROLL — 무작위 페이지 뽑기
@@ -284,21 +287,53 @@ const ruleWidth = (i: number, r: number) => 0.6 + ((i * 7 + r * 13) % 34) / 100
 // SELECT 로 눕힌 두 쪽에만 읽히는 글이 찍힌다. 왼쪽은 명언 한 마디, 오른쪽은 보상 목록.
 // 어느 글이 나올지는 펼친 쪽번호로 정해서, 같은 자리를 다시 펴면 같은 글이 나온다.
 
-const REWARDS = [
-  'A ten-minute walk',
-  'One episode',
-  'Iced coffee',
-  'A square of chocolate',
-  'Fifteen minutes of games',
-  'Call a friend',
-  'Your favorite snack',
-  'A short nap',
-  'A new sticker',
-  'A music break',
-  'Stretch and water',
-  'Doodle time',
+// 보상은 '쉴 시간'이다. 크기는 지금 설 수 있는 가장 높은 티어의
+// breakMinutes 를 기준으로 정해진다 — 긴 판을 뛰는 사람일수록 한 번에 크게 쉰다.
+// weight 는 그 기준 분의 배수.
+const REWARDS: { label: string; weight: number }[] = [
+  { label: 'stretch + water', weight: 0.5 },
+  { label: 'music, eyes shut', weight: 0.5 },
+  { label: 'doodle time', weight: 0.5 },
+  { label: 'coffee run', weight: 0.75 },
+  { label: 'a real snack', weight: 0.75 },
+  { label: 'call a friend', weight: 1 },
+  { label: 'walk outside', weight: 1 },
+  { label: 'games', weight: 1.5 },
+  { label: 'one episode', weight: 1.5 },
+  { label: 'a nap', weight: 2 },
 ]
 const REWARD_COUNT = 5
+
+// 쪽번호를 섞어 32비트 해시로. 같은 자리를 다시 펴면 같은 결과가 나온다.
+const hash = (n: number) => {
+  let x = (n * 2654435761) % 4294967296
+  x = (x ^ (x >>> 15)) * 2246822519 % 4294967296
+  return (x ^ (x >>> 13)) >>> 0
+}
+
+/** 한 번 펼칠 때 나오는 것. 절반은 그냥 시간, 절반은 쿠폰. */
+type Draw =
+  | { kind: 'time'; label: string; minutes: number }
+  | { kind: 'coupon'; coupon: Coupon; coins: number }
+
+function drawFor(seed: number, rank: Arena): Draw {
+  const h = hash(seed)
+  // 최하위 비트로 50:50. 나머지 비트는 무엇이 나올지 고르는 데 쓴다.
+  if (h % 2 === 0) {
+    const pickIndex = (h >>> 1) % REWARDS.length
+    const { label, weight } = REWARDS[pickIndex]
+    return { kind: 'time', label, minutes: rewardMinutes(rank.breakMinutes, weight) }
+  }
+  const coupon = COUPONS[(h >>> 1) % COUPONS.length]
+  return { kind: 'coupon', coupon, coins: jackpotCoins(h >>> 6) }
+}
+
+/** 기준 분 × 배수. 20분이 넘어가면 5분 단위로 떨어뜨려 읽기 쉽게. */
+function rewardMinutes(base: number, weight: number): number {
+  const raw = base * weight
+  if (raw >= 20) return Math.round(raw / 5) * 5
+  return Math.max(2, Math.round(raw))
+}
 
 // 글이 놓이는 자리. u 는 바깥(왼쪽 화면 기준) 0.88 에서 책등 쪽 0.12 까지, 쪽 너비의 0.76.
 const TEXT_U0 = 0.88
@@ -306,16 +341,25 @@ const TEXT_U1 = 0.12
 const TEXT_W = (TEXT_U0 - TEXT_U1) * W    // 197.6
 const TEXT_V0 = 0.12
 
-// 픽셀 글꼴은 고정폭이라 글자 수로 줄을 나눈다.
-const QUOTE_FONT = 14
-const QUOTE_STEP = 0.07                   // 줄 간격(쪽 높이 비율) ≈ 24
-const QUOTE_CHARS = Math.floor(TEXT_W / QUOTE_FONT)   // 14
-const LIST_FONT = 10
-const LIST_STEP = 0.055
-const LIST_CHARS = Math.floor(TEXT_W / LIST_FONT)     // 19
-const HEAD_FONT = 12
-const BY_FONT = 9
-const BY_CHARS = Math.floor(TEXT_W / BY_FONT)          // 21
+// 줄은 글자 수로 나눈다. 세리프는 고정폭이 아니라서 대문자 평균 자간(≈0.65em)을
+// 기준으로 한 줄에 들어갈 글자 수를 잡는다. 예전 계산(÷글자크기)은 고정폭 픽셀
+// 글꼴 때라 줄이 쪽 너비의 6할밖에 못 쓰고 글씨도 작았다.
+const CAP_ADVANCE = 0.65
+const charsPerLine = (font: number, advance = CAP_ADVANCE) => Math.floor(TEXT_W / (advance * font))
+
+const QUOTE_FONT = 22
+const QUOTE_STEP = 0.081                  // 줄 간격(쪽 높이 비율) ≈ 27.5
+const QUOTE_CHARS = charsPerLine(QUOTE_FONT)          // 13
+const LIST_FONT = 14
+const LIST_STEP = 0.064
+const LIST_CHARS = charsPerLine(LIST_FONT, 0.55)      // 29
+const HEAD_FONT = 16
+const NAME_FONT = 21                      // 쿠폰 이름
+const BIG_FONT = 34                       // 분·코인 같은 숫자
+const EFFECT_FONT = 17                    // 쿠폰이 무슨 일을 하는지 — 쪽에서 제일 읽히는 글
+const EFFECT_CHARS = charsPerLine(EFFECT_FONT, 0.55)
+const BY_FONT = 14
+const BY_CHARS = charsPerLine(BY_FONT, 0.6)            // 25
 
 // 쪽번호를 목록 자리로 바꾼다. 왼쪽 쪽은 늘 짝수라 그냥 나머지를 쓰면 절반은 영영 안 나온다.
 // 반으로 접은 뒤 목록 길이와 서로소인 37 을 곱해 돌리면 160 자리가 100 개를 다 훑는다.
@@ -337,46 +381,75 @@ function wrap(text: string, max: number): string[] {
 }
 
 // 쪽번호를 씨앗으로 쓰는 간단한 난수. 결과가 뽑기마다 흔들리지 않게.
-function pickRewards(seed: number): string[] {
+function pickRewards(seed: number): { label: string; weight: number }[] {
   let x = seed * 2654435761 % 4294967296 || 1
   const pool = REWARDS.slice()
-  const out: string[] = []
+  const out: { label: string; weight: number }[] = []
   while (out.length < REWARD_COUNT && pool.length) {
     x = (x * 1664525 + 1013904223) % 4294967296
     out.push(pool.splice(x % pool.length, 1)[0])
   }
-  return out
+  // 작은 보상이 위로 오게 정렬한다. 페이지가 사다리처럼 읽힌다.
+  return out.sort((a, b) => a.weight - b.weight)
 }
 
 type TextLine = { text: string; size: number; color: string; align: 'start' | 'end'; glow?: boolean }
 
 // 왼쪽 쪽: 명언이 쪽을 다 차지하도록 크게, 맨 밑에 누가 한 말인지 작게.
-function quoteLines(seed: number): TextLine[] {
-  const [q, who] = QUOTES[mix(seed) % QUOTES.length]
+function quoteLines(seed: number, draw: Draw): TextLine[] {
+  // 쿠폰에는 짝이 되는 문장이 정해져 있다. 그냥 시간이면 책에서 아무 문장이나.
+  const [q, who] =
+    draw.kind === 'coupon'
+      ? [draw.coupon.quote, draw.coupon.who]
+      : QUOTES[mix(seed) % QUOTES.length]
   const body: TextLine[] = wrap(q, QUOTE_CHARS).map((t) => ({ text: t, size: QUOTE_FONT, color: T.ink, align: 'start', glow: true }))
   // 말한 이가 길면 접는다. 줄 간격은 명언과 같아 자리는 그대로 이어진다.
-  const by: TextLine[] = wrap('- ' + who, BY_CHARS).map((t) => ({ text: t, size: BY_FONT, color: T.primary, align: 'end' }))
+  const by: TextLine[] = who
+    ? wrap('- ' + who, BY_CHARS).map((t) => ({ text: t, size: BY_FONT, color: T.primary, align: 'end' as const }))
+    : []
   return body.concat({ text: '', size: QUOTE_FONT, color: T.ink, align: 'start' }, by)
 }
 
-// 오른쪽 쪽: 보상 목록.
-function rewardLines(seed: number): TextLine[] {
-  const head: TextLine[] = [
-    { text: 'Rewards', size: HEAD_FONT, color: T.primary, align: 'start', glow: true },
-    { text: '', size: LIST_FONT, color: T.ink, align: 'start' },
-  ]
-  return head.concat(
-    pickRewards(seed).flatMap((r, i) =>
-      // 첫 줄엔 체크칸, 이어지는 줄은 그만큼 들여 쓴다.
-      wrap(r, LIST_CHARS - 4).map((t, k) => ({
-        text: (k === 0 ? '\u25a1  ' : '    ') + t, size: LIST_FONT, color: T.ink, align: 'start' as const,
+// 오른쪽 쪽: 이번에 뽑은 것 하나. 시간이면 액수를, 쿠폰이면 이름과 효과를.
+function rewardLines(draw: Draw, rank: Arena): TextLine[] {
+  const blank = { text: '', size: LIST_FONT, color: T.ink, align: 'start' as const }
+
+  if (draw.kind === 'time') {
+    return [
+      { text: 'Rest earned', size: HEAD_FONT, color: T.primary, align: 'start', glow: true },
+      { text: rank.name.toUpperCase() + ' TIER', size: LIST_FONT, color: T.muted, align: 'start' },
+      blank,
+      { text: draw.minutes + ' MIN', size: BIG_FONT, color: T.ink, align: 'start', glow: true },
+      blank,
+      ...wrap(draw.label + ', guilt-free', LIST_CHARS).map((t) => ({
+        text: t, size: LIST_FONT, color: T.muted, align: 'start' as const,
       })),
-    ),
-  )
+    ]
+  }
+
+  const { coupon, coins } = draw
+  return [
+    { text: 'Coupon', size: HEAD_FONT, color: T.primary, align: 'start', glow: true },
+    blank,
+    ...wrap(coupon.name.toUpperCase(), Math.floor(LIST_CHARS * LIST_FONT / NAME_FONT)).map((t) => ({
+      text: t, size: NAME_FONT, color: T.ink, align: 'start' as const, glow: true,
+    })),
+    blank,
+    ...wrap(coupon.effect, EFFECT_CHARS).map((t) => ({
+      text: t, size: EFFECT_FONT, color: T.ink, align: 'start' as const,
+    })),
+    // 주사위는 이 자리에서 바로 떨어진다. 얼마인지 쪽에 박아 준다.
+    ...(coupon.id === 'luckyGamble'
+      ? [blank, { text: '+ ' + coins + ' COINS', size: BIG_FONT, color: T.primary, align: 'start' as const, glow: true }]
+      : []),
+  ]
 }
 
 // onFocusChange: ROLL 로 책에 집중하는 동안 true. 바깥(탭 바)도 같이 치우라고 알린다.
 export default function PageRoll({ onFocusChange }: { onFocusChange?: (focused: boolean) => void } = {}) {
+  // 보상 크기의 기준. 지금 서 있는 방을 따른다 — 긴 판을 뛰는 사람이 크게 쉰다.
+  const { inv } = useInventory()
+  const playerRank = arenaById(inv.arenaId)
   const [scene, setScene] = useState<Scene>(SHUT)
   // idle: 제목과 ROLL 이 보이는 첫 화면. 책장은 보이지만 만질 수 없다.
   // shelf: ROLL 을 눌러 책장만 남은 상태. 여기서만 책을 고를 수 있다.
@@ -392,6 +465,8 @@ export default function PageRoll({ onFocusChange }: { onFocusChange?: (focused: 
   const [page, setPage] = useState(160)
   const [pages, setPages] = useState<number[]>(() => pagesFor(160, TOTAL))
   const [pick, setPick] = useState<{ lo: number; hi: number; a: number; b: number } | null>(null)
+  // 펼친 자리가 정해지면 이번에 뭘 받는지도 같이 정해진다 — 두 쪽이 같은 결과를 본다.
+  const draw = useMemo(() => (pick ? drawFor(pick.a, playerRank) : null), [pick, playerRank])
   const [hover, setHover] = useState<number | null>(null)
 
   const sceneRef = useRef(scene)
@@ -608,8 +683,8 @@ export default function PageRoll({ onFocusChange }: { onFocusChange?: (focused: 
           strokeWidth={2} strokeLinejoin="round" />
         {showText
           ? i === pick!.lo
-            ? pageText(th, quoteLines(pick!.a), QUOTE_STEP)
-            : pageText(th, rewardLines(pick!.b), LIST_STEP)
+            ? pageText(th, quoteLines(pick!.a, draw!), QUOTE_STEP)
+            : pageText(th, rewardLines(draw!, playerRank), LIST_STEP)
           : Array.from({ length: RULES }, (_, r) => {
           const v = 0.1 + r * 0.045
           // u 는 책등에서 바깥으로 재는 값이다. 왼쪽 쪽은 글이 바깥에서
@@ -823,15 +898,15 @@ export default function PageRoll({ onFocusChange }: { onFocusChange?: (focused: 
 
   return (
     <View style={styles.screen}>
-      {focused ? (
-        // 책장이 화면을 다 쓰도록 CLOSE 는 무대 위에 띄운다.
+      {mode === 'shelf' ? (
+        // 책장을 훑는 동안에만 CLOSE. 책을 뽑고 나면 SELECT/BACK 이 그 몫을 한다.
         <View style={styles.focusBar} pointerEvents="box-none">
           <Text style={styles.closeText} onPress={reset} accessibilityRole="button"
             accessibilityLabel="Close the book">
             {busy ? '' : '← Close'}
           </Text>
         </View>
-      ) : (
+      ) : mode === 'idle' ? (
         <>
           <View style={styles.head}>
             <Text style={styles.title} accessibilityRole="header">Page roll</Text>
@@ -840,13 +915,8 @@ export default function PageRoll({ onFocusChange }: { onFocusChange?: (focused: 
             </Text>
           </View>
 
-          <Card level={0} tone="alt" radius={RADIUS.md} boxStyle={styles.metaRow}>
-            <Text style={styles.metaLabel}>Total pages</Text>
-            <Text style={styles.metaValue}>{TOTAL}</Text>
-          </Card>
-
         </>
-      )}
+      ) : null}
 
       {/* ROLL 뒤에는 화면 여백까지 밀어내고 무대가 가장자리에 붙는다. */}
       <View style={[styles.stage, focused && styles.stageFull]} {...(stageMouse as object)}
@@ -859,7 +929,9 @@ export default function PageRoll({ onFocusChange }: { onFocusChange?: (focused: 
         </Svg>
       </View>
 
-      {/* 하단 액션은 늘 한 자리를 지킨다 — 책이 펴졌으면 SELECT/BACK, 아니면 ROLL. */}
+      {/* 하단 액션. 책이 펴졌으면 SELECT/BACK, 첫 화면이면 ROLL.
+          책장에서 책을 뽑는 동안(shelf·pull·shut)은 아무것도 두지 않는다 —
+          버튼이 사라진 만큼 무대가 넓어져 책장이 화면을 다 쓴다. */}
       {mode === 'open' || mode === 'flat' ? (
         <Button
           size="lg"
@@ -871,17 +943,11 @@ export default function PageRoll({ onFocusChange }: { onFocusChange?: (focused: 
         >
           {flat ? 'Back' : 'Select'}
         </Button>
-      ) : (
-        <Button
-          size="lg"
-          onPress={roll}
-          disabled={busy || mode !== 'idle'}
-          accessibilityLabel="Roll for a page"
-          style={styles.action}
-        >
+      ) : mode === 'idle' ? (
+        <Button size="lg" onPress={roll} disabled={busy} accessibilityLabel="Roll for a page" style={styles.action}>
           Roll
         </Button>
-      )}
+      ) : null}
     </View>
   )
 }
@@ -889,33 +955,16 @@ export default function PageRoll({ onFocusChange }: { onFocusChange?: (focused: 
 const styles = StyleSheet.create({
   screen: { flex: 1, width: '100%', backgroundColor: T.bg, paddingHorizontal: 16, paddingTop: 8, paddingBottom: 12 },
   head: { marginBottom: 16, flexShrink: 0 },
-  title: { fontFamily: T.fontDisplay, fontSize: 28, color: T.ink, letterSpacing: -0.4 },
-  sub: { fontFamily: T.font, fontSize: 14, lineHeight: 21, color: T.muted, marginTop: 6 },
+  title: { fontFamily: T.fontDisplay, fontSize: 31, color: T.ink, letterSpacing: -0.4 },
+  sub: { fontFamily: T.font, fontSize: 16, lineHeight: 21, color: T.muted, marginTop: 6 },
 
-  metaRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginBottom: 12,
-    paddingHorizontal: 14,
-    paddingVertical: 11,
-    flexShrink: 0,
-  },
-  metaLabel: {
-    fontFamily: T.fontMedium,
-    fontSize: 11,
-    letterSpacing: 1,
-    textTransform: 'uppercase',
-    color: T.muted,
-  },
-  metaValue: { fontFamily: T.fontDisplay, fontSize: 17, color: T.ink },
 
   // 하단 액션 버튼. 무대(flex:1)에 밀리지 않게 폭은 화면 전체, 크기는 고정.
   action: { alignSelf: 'stretch', width: '100%', flexShrink: 0 },
   focusBar: { position: 'absolute', top: 10, left: 16, zIndex: 1 },
   closeText: {
     fontFamily: T.fontMedium,
-    fontSize: 14,
+    fontSize: 16,
     color: T.inkSoft,
     backgroundColor: 'rgba(250,248,242,0.9)',
     borderRadius: RADIUS.full,

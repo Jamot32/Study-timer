@@ -1,8 +1,8 @@
 import { ArrowLeft } from 'lucide-react-native';
 import React, { useCallback, useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { Avatar, type StickerDrag } from '@/components/Avatar';
-import { Button, Card, RADIUS, T } from '@/components/nova';
+import { Button, RADIUS, T, Tap } from '@/components/nova';
 import {
   AVATARS,
   FRAMES,
@@ -94,20 +94,15 @@ export default function ProfileEdit({ profile, onProfileChanged, onBack }: Profi
           <Text style={styles.fieldLabel}>Picture</Text>
           <View style={styles.grid}>
             {AVATARS.map((glyph) => (
-              <Pressable
+              <Tap
                 key={glyph}
-                accessibilityRole="button"
                 accessibilityLabel={`Picture ${glyph}`}
                 accessibilityState={{ selected: profile.avatar === glyph }}
                 onPress={() => edit({ avatar: glyph })}
-                style={({ pressed }) => [
-                  styles.cell,
-                  profile.avatar === glyph && styles.cellSelected,
-                  pressed && { opacity: 0.6 },
-                ]}
+                style={[styles.cell, profile.avatar === glyph ? styles.cellSelected : null]}
               >
                 <Text style={styles.cellGlyph}>{glyph}</Text>
-              </Pressable>
+              </Tap>
             ))}
           </View>
 
@@ -119,20 +114,15 @@ export default function ProfileEdit({ profile, onProfileChanged, onBack }: Profi
             {STICKERS.map((glyph) => {
               const full = stickers.length >= MAX_STICKERS;
               return (
-                <Pressable
+                <Tap
                   key={glyph}
                   disabled={full}
-                  accessibilityRole="button"
                   accessibilityLabel={`Add sticker ${glyph}`}
                   onPress={() => addSticker(glyph)}
-                  style={({ pressed }) => [
-                    styles.cell,
-                    full && { opacity: 0.35 },
-                    pressed && { opacity: 0.6 },
-                  ]}
+                  style={[styles.cell, full ? styles.cellFull : null]}
                 >
                   <Text style={styles.cellGlyph}>{glyph}</Text>
-                </Pressable>
+                </Tap>
               );
             })}
           </View>
@@ -156,17 +146,15 @@ export default function ProfileEdit({ profile, onProfileChanged, onBack }: Profi
             {FRAMES.map((frame) => {
               const selected = (profile.frame ?? T.border) === frame.value;
               return (
-                <Pressable
+                <Tap
                   key={frame.value}
-                  accessibilityRole="button"
                   accessibilityLabel={`Frame ${frame.label}`}
                   accessibilityState={{ selected }}
                   onPress={() => edit({ frame: frame.value })}
-                  style={({ pressed }) => [
+                  style={[
                     styles.swatch,
                     { backgroundColor: frame.value },
-                    selected && styles.swatchSelected,
-                    pressed && { opacity: 0.6 },
+                    selected ? styles.swatchSelected : null,
                   ]}
                 />
               );
@@ -183,21 +171,21 @@ const styles = StyleSheet.create({
   headerRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   headerText: { flex: 1 },
   backBtn: { marginLeft: -10 },
-  title: { fontFamily: T.fontDisplay, fontSize: 26, color: T.ink, letterSpacing: -0.3 },
-  subtitle: { fontFamily: T.font, fontSize: 14, color: T.muted, marginTop: 2 },
+  title: { fontFamily: T.fontDisplay, fontSize: 29, color: T.ink, letterSpacing: -0.3 },
+  subtitle: { fontFamily: T.font, fontSize: 16, color: T.muted, marginTop: 2 },
 
   canvasWrap: { alignItems: 'center', marginTop: 20 },
-  hint: { fontFamily: T.font, fontSize: 13, lineHeight: 19, color: T.muted, textAlign: 'center', marginTop: 14 },
+  hint: { fontFamily: T.font, fontSize: 15, lineHeight: 19, color: T.muted, textAlign: 'center', marginTop: 14 },
 
   fieldLabel: {
     fontFamily: T.fontMedium,
-    fontSize: 11,
+    fontSize: 13,
     letterSpacing: 1.1,
     textTransform: 'uppercase',
     color: T.muted,
     marginTop: 22,
   },
-  fieldHint: { fontFamily: T.font, fontSize: 13, lineHeight: 19, color: T.muted, marginTop: 6 },
+  fieldHint: { fontFamily: T.font, fontSize: 15, lineHeight: 19, color: T.muted, marginTop: 6 },
   grid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10, marginTop: 12 },
   cell: {
     width: 46,
@@ -209,8 +197,9 @@ const styles = StyleSheet.create({
     borderColor: T.border,
     backgroundColor: T.card,
   },
+  cellFull: { opacity: 0.35 },
   cellSelected: { borderColor: T.primary, backgroundColor: T.primarySoft, borderWidth: 2 },
-  cellGlyph: { fontSize: 22, textAlign: 'center' },
+  cellGlyph: { fontSize: 25, textAlign: 'center' },
   swatch: {
     width: 46,
     height: 46,
@@ -221,7 +210,7 @@ const styles = StyleSheet.create({
   swatchSelected: { borderColor: T.ink, borderWidth: 3 },
   input: {
     fontFamily: T.font,
-    fontSize: 16,
+    fontSize: 18,
     color: T.ink,
     borderWidth: 1,
     borderColor: T.border,
