@@ -7,6 +7,8 @@ import { confirmDestructive } from '../lib/confirm'
 import { useStudyTimer } from '../lib/useStudyTimer'
 import { awayOutcome } from '../lib/away'
 import { type Profile } from '../lib/auth'
+import { loadSessions } from '../lib/sessions'
+import { studyStats } from '../lib/progress'
 import { Avatar } from './Avatar'
 import ConfirmDialog from './PixelConfirm'
 import { Button, Card, ProgressBar, RADIUS, T } from './nova'
@@ -312,6 +314,7 @@ export function StudyTimer({
   opponent,
   arena,
   profile,
+  refreshKey = 0,
 }: {
   /** 판이 끝났다. 배틀이었다면 판정에 필요한 값이 실려 온다. */
   onFinished?: (summary?: MatchSummary) => void
@@ -326,6 +329,7 @@ export function StudyTimer({
   arena?: Arena | null
   /** Logged-in profile; drives the header avatar, outer line, title and name. */
   profile?: Profile
+  refreshKey?: number
 }) {
   const [mode, setMode] = useState<'FOCUS' | 'SHORT BREAK'>('FOCUS')
   const [breakBank, setBreakBank] = useState(0)
@@ -333,6 +337,7 @@ export function StudyTimer({
   const [weeklyMax, setWeeklyMax] = useState(0)
   const [breakElapsed, setBreakElapsed] = useState(0)
   const [isFinishing, setIsFinishing] = useState(false)
+  const [level, setLevel] = useState(1)
   const [confirmResign, setConfirmResign] = useState(false)
   // 상대는 cpuOpponent 모델이 1초씩 굴려 준다. 쉬기도 하고, 기권도 한다.
   const [cpu, setCpu] = useState<CpuState | null>(null)
@@ -361,6 +366,16 @@ export function StudyTimer({
   // 세션이 끝날 때마다 다시 읽는다.
   const [payoutKey, setPayoutKey] = useState(0)
   const { minutes: studiedTodayMinutes } = useStudiedToday(payoutKey)
+
+  useEffect(() => {
+    let cancelled = false
+    loadSessions().then((sessions) => {
+      if (!cancelled) setLevel(studyStats(sessions).level)
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [refreshKey])
 
   // 배틀 중일 때만 상대 시계가 돈다. 3-2-1 카운트다운이 끝나야 비로소 출발한다.
   const inBattle = onResign !== undefined
@@ -646,7 +661,7 @@ export function StudyTimer({
                 <Text style={styles.name} numberOfLines={1}>
                   {name}
                 </Text>
-                <Text style={styles.level}>Lv 4</Text>
+                <Text style={styles.level}>Lv {level}</Text>
               </View>
             </View>
           </View>
