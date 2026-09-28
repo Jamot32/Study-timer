@@ -3,27 +3,45 @@ import {
   ActivityIndicator,
   Animated,
   Easing,
+  Modal,
   Pressable,
-  ScrollView,
   StyleSheet,
   Text,
   View,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
-import { ChevronRight, Clock, Coins, Lock, Settings as SettingsIcon, Sprout, Swords, Trophy, X } from 'lucide-react-native';
+import {
+  ChevronRight,
+  Coins,
+  Plus,
+  Settings as SettingsIcon,
+  Dumbbell,
+  Swords,
+  TrendingUp,
+  Trophy,
+  X,
+} from 'lucide-react-native';
 import Svg, { Circle, Ellipse, Path } from 'react-native-svg';
 import { Button, Card, RADIUS, T, Tap, elevation } from './nova';
 import { type Profile } from '../lib/auth';
 import { createCpuOpponent, type CpuOpponent } from '../lib/cpuOpponent';
-import { formatMatchLength, highestUnlocked, isUnlocked, RANKS, type Rank } from '../lib/ranks';
-import { PLAYER_TROPHIES } from '../lib/wallet';
-import { useInventory } from '../lib/inventory';
+import {
+  arenaById,
+  canPromote,
+  eloToNext,
+  formatMatchLength,
+  nextArena,
+  type Arena,
+} from '../lib/arena';
+import { PROMOTION_GIFT_MULTIPLIER } from '../lib/economy';
+import { applyLedger, countOf, equipCoupon, useInventory, type Inventory } from '../lib/inventory';
+import { COUPONS, type Coupon } from '../lib/coupons';
 
 type BattlePhase = 'lobby' | 'searching' | 'matchFound';
 
 type BattleLobbyProps = {
   /** 매치가 잡혔다. 카운트다운부터는 App 이 타이머 화면 위에서 이어 간다. */
-  onMatchStart: (opponent: CpuOpponent, rank: Rank) => void;
+  onMatchStart: (opponent: CpuOpponent | null, arena: Arena, solo: boolean) => void;
   /** 매칭을 걸었는지(=탭을 잠가야 하는지) 알린다. */
   onMatchmakingChange?: (searching: boolean) => void;
   /** 프로필(아바타·이름)을 누르면 편집으로. */
@@ -109,7 +127,7 @@ function ProfileStrip({
 }
 
 /** 대결이 열리는 장소. 배지에는 지금 고른 티어가 뜬다. */
-function ArenaArt({ rank }: { rank: Rank }) {
+function ArenaArt({ rank, overlay }: { rank: Arena; overlay?: React.ReactNode }) {
   return (
     <View style={styles.arenaWrap}>
     <Card level={2} radius={RADIUS.xl} style={styles.arenaFrame} boxStyle={styles.arenaBorder}>
@@ -136,6 +154,8 @@ function ArenaArt({ rank }: { rank: Rank }) {
           <Ellipse cx={244} cy={192} rx={30} ry={17} fill="#C7D3AC" />
         </Svg>
 
+        {/* 그림 안 좌측 상단에 얹힌다. 정원 문을 가리지 않는 자리다. */}
+        {overlay ? <View style={styles.artOverlay}>{overlay}</View> : null}
       </LinearGradient>
     </Card>
 
@@ -145,92 +165,150 @@ function ArenaArt({ rank }: { rank: Rank }) {
         <View style={[styles.arenaTierDot, { backgroundColor: rank.color }]} />
         <Text style={[styles.arenaBadgeText, { color: rank.color }]}>{rank.name}</Text>
         <Text style={styles.arenaBadgeMeta}>
-          {formatMatchLength(rank.matchSeconds)} · {rank.bet} coins
+          {formatMatchLength(rank.matchSeconds)} · {rank.entryFee} coins
         </Text>
       </View>
-      <Text style={styles.arenaName} numberOfLines={1}>{rank.blurb}</Text>
     </View>
     </View>
   );
 }
 
 /**
- * 티어 고르기. 판당 시간과 판돈이 곧 등급이고, 들어가려면 지갑에
- * minCoins 이상을 들고 있어야 한다 — 판돈만 있으면 되는 게 아니다.
+ * 판에 들고 들어갈 쿠폰 두 자리.
+ * 아직 효과가 붙지는 않았다 — 무엇을 챙겼는지 보이고 고르는 데까지다.
  */
-function RankPicker({
-  selected,
-  coins,
-  onSelect,
+function CouponSlots({
+  inv,
+  onPick,
 }: {
-  selected: Rank;
-  /** 지금 가진 코인. */
-  coins: number;
-  onSelect: (rank: Rank) => void;
+  inv: Inventory;
+  onPick: (slot: 0 | 1) => void;
 }) {
   return (
-    <View>
+    <View style={styles.slots}>
+      {([0, 1] as const).map((slot) => {
+        const id = inv.equipped[slot] ?? null;
+        const coupon = id ? COUPONS.find((c) => c.id === id) : undefined;
+        return (
+          <Tap
+            key={slot}
+            onPress={() => onPick(slot)}
+            accessibilityLabel={
+              coupon ? `Coupon slot ${slot + 1}: ${coupon.name}` : `Coupon slot ${slot + 1}, empty`
+            }
+            style={[styles.slot, coupon && styles.slotFilled]}
+          >
+            {coupon ? (
+              <Text style={styles.slotName} numberOfLines={2}>
+                {coupon.name}
+              </Text>
+            ) : (
+              <Plus size={18} color={T.muted} strokeWidth={2.2} />
+            )}
+          </Tap>
+        );
+      })}
+    </View>
+  );
+}
+
+/** 가진 쿠폰 중에서 한 장 고르는 창. 없으면 어디서 구하는지 알려 준다. */
+function CouponPicker({
+  slot,
+  inv,
+  onClose,
+  onChoose,
+}: {
+  slot: 0 | 1 | null;
+  inv: Inventory;
+  onClose: () => void;
+  onChoose: (id: string | null) => void;
+}) {
+  const owned = COUPONS.filter((c) => countOf(inv, c.id) > 0);
+  return (
+    <Modal visible={slot !== null} transparent animationType="fade" onRequestClose={onClose}>
+      <Tap onPress={onClose} style={styles.pickerBackdrop}>
+        <Card level={3} radius={RADIUS.xl} style={styles.pickerFrame} boxStyle={styles.picker}>
+          <Text style={styles.pickerTitle}>Slot {(slot ?? 0) + 1}</Text>
+          {owned.length === 0 ? (
+            <Text style={styles.pickerEmpty}>
+              No coupons yet. Roll a book or buy one in the shop.
+            </Text>
+          ) : (
+            owned.map((c: Coupon) => (
+              <Tap key={c.id} onPress={() => onChoose(c.id)} style={styles.pickerRow}>
+                <View style={styles.pickerCopy}>
+                  <Text style={styles.pickerName}>{c.name}</Text>
+                  <Text style={styles.pickerEffect} numberOfLines={2}>
+                    {c.effect}
+                  </Text>
+                </View>
+                <Text style={styles.pickerCount}>x{countOf(inv, c.id)}</Text>
+              </Tap>
+            ))
+          )}
+          <Button block variant="outline" onPress={() => onChoose(null)} style={styles.pickerClear}>
+            Leave empty
+          </Button>
+        </Card>
+      </Tap>
+    </Modal>
+  );
+}
+
+/**
+ * 지금 선 방과, 다음 방까지 남은 점수.
+ * 들어갈 수 있는 방은 이 하나뿐이라 고를 것이 없다 — 목록 대신 진행만 보여 준다.
+ */
+function ArenaStanding({ current, elo }: { current: Arena; elo: number }) {
+  const remaining = eloToNext(elo, current.id);
+  const next = nextArena(current.id);
+  const span = next ? next.eloFloor - current.eloFloor : 0;
+  const progress = span > 0 ? Math.max(0, Math.min(1, (elo - current.eloFloor) / span)) : 1;
+
+  return (
+    <View style={styles.standing}>
       <View style={styles.rankHeader}>
-        <Text style={styles.rankHeaderLabel}>Tier</Text>
+        <View style={styles.standingLeft}>
+          <View style={[styles.rankDot, { backgroundColor: current.color }]} />
+          <Text style={[styles.standingName, { color: current.color }]}>{current.name}</Text>
+          <Text style={styles.standingElo}>{elo} ELO</Text>
+        </View>
         <Text style={styles.rankHeaderHint}>
-          {coins.toLocaleString()} coins held · pick a match length
+          {remaining === null || !next
+            ? 'Top arena'
+            : `${remaining} ELO to ${next.name}`}
         </Text>
       </View>
-      <ScrollView
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        contentContainerStyle={styles.rankRow}
-      >
-        {RANKS.map((rank) => {
-          const active = rank.id === selected.id;
-          const open = isUnlocked(rank, coins);
-          return (
-            <Pressable
-              key={rank.id}
-              onPress={() => open && onSelect(rank)}
-              disabled={!open}
-              accessibilityRole="button"
-              accessibilityState={{ selected: active, disabled: !open }}
-              accessibilityLabel={
-                open
-                  ? `${rank.name}, ${formatMatchLength(rank.matchSeconds)} match, ${rank.bet} coin stake`
-                  : `${rank.name}, locked, needs ${rank.minCoins} coins`
-              }
-              style={[
-                styles.rankCard,
-                active && { borderColor: rank.color, borderWidth: 2, backgroundColor: T.cardAlt },
-                !open && styles.rankCardLocked,
-              ]}
-            >
-              <View style={styles.rankTop}>
-                <View style={[styles.rankDot, { backgroundColor: rank.color }]} />
-                <Text style={[styles.rankName, active && { color: rank.color }]} numberOfLines={1}>
-                  {rank.name}
-                </Text>
-              </View>
-              <View style={styles.rankMeta}>
-                <Clock size={11} color={T.muted} strokeWidth={2.2} />
-                <Text style={styles.rankMetaText}>{formatMatchLength(rank.matchSeconds)}</Text>
-              </View>
-              <View style={styles.rankMeta}>
-                <Coins size={11} color={T.muted} strokeWidth={2.2} />
-                <Text style={styles.rankMetaText}>{rank.bet}</Text>
-              </View>
-              {open ? (
-                <Text style={styles.rankEntry}>
-                  {rank.minCoins === 0 ? 'open to all' : `${rank.minCoins.toLocaleString()}+`}
-                </Text>
-              ) : (
-                <View style={styles.rankMeta}>
-                  <Lock size={10} color={T.danger} strokeWidth={2.4} />
-                  <Text style={styles.rankLocked}>{rank.minCoins.toLocaleString()}</Text>
-                </View>
-              )}
-            </Pressable>
-          );
-        })}
-      </ScrollView>
+
+      {next ? (
+        <View style={styles.eloTrack}>
+          <View style={[styles.eloFill, { width: `${progress * 100}%` }]} />
+        </View>
+      ) : null}
     </View>
+  );
+}
+
+/**
+ * 승급 제안. ELO 가 닿아도 자동으로 올리지 않는다 —
+ * 다음 방의 유효 시간과 참가비를 보여 주고 직접 고르게 한다. 올라가면 이전 방은 닫힌다.
+ */
+function PromotionCard({ to, onAccept }: { to: Arena; onAccept: () => void }) {
+  return (
+    <Card level={2} tone="primary" boxStyle={styles.promo}>
+      <View style={styles.promoHead}>
+        <TrendingUp size={18} color={T.primaryDeep} strokeWidth={2.2} />
+        <Text style={styles.promoTitle}>{to.name} is open to you</Text>
+      </View>
+      <Text style={styles.promoBody}>
+        {formatMatchLength(to.matchSeconds)} matches, {to.entryFee} coins to enter. Moving up closes
+        your current arena for good.
+      </Text>
+      <Button size="sm" onPress={onAccept} style={styles.promoButton}>
+        Move up
+      </Button>
+    </Card>
   );
 }
 
@@ -329,12 +407,30 @@ export default function BattleLobby({
   const [elapsed, setElapsed] = useState(0);
   const [tipIndex, setTipIndex] = useState(0);
   const [vsCpu, setVsCpu] = useState(false);
+  // 이번 판이 솔로인지. 솔로는 참가비도 ELO 도 걸지 않는다.
+  const [solo, setSolo] = useState(false);
   const [rival, setRival] = useState<CpuOpponent | null>(null);
-  // 지갑이 감당하는 가장 높은 티어에서 시작한다.
-  // 지갑은 상점과 같은 저장소를 본다 — 산 만큼 줄고, 그만큼 설 수 있는 티어도 달라진다.
-  const { inv } = useInventory();
+  // 지갑·ELO·지금 선 방은 모두 같은 저장소에서 온다.
+  const { inv, refresh } = useInventory();
   const coins = inv.coins;
-  const [rank, setRank] = useState<Rank>(highestUnlocked(coins));
+  const arena = arenaById(inv.arenaId);
+  // 쿠폰 자리를 누르면 열리는 고르기 창.
+  const [pickingSlot, setPickingSlot] = useState<0 | 1 | null>(null);
+  // 랭크전에 필요한 건 참가비뿐이다.
+  const canEnter = coins >= arena.entryFee;
+  const promotable = canPromote(inv.elo, inv.arenaId);
+  const promoteTo = nextArena(inv.arenaId);
+
+
+  const promote = useCallback(async () => {
+    if (!promoteTo) return;
+    // 새 방 첫 입장 축하금 — 첫 참가비를 스스로 마련하지 않아도 되게.
+    const gift = inv.giftedArenas.includes(promoteTo.id)
+      ? 0
+      : promoteTo.entryFee * PROMOTION_GIFT_MULTIPLIER;
+    await applyLedger({ arenaId: promoteTo.id, coins: gift, giftArena: promoteTo.id });
+    refresh();
+  }, [inv.giftedArenas, promoteTo, refresh]);
 
 
   useEffect(() => {
@@ -357,7 +453,11 @@ export default function BattleLobby({
       if (seconds >= CPU_MATCH_DEADLINE || Math.random() < CPU_MATCH_CHANCE) {
         // 상대는 여기서 한 명 지어진다 — 외형도 공부 습관도 이 순간 정해진다.
         setRival(
-          createCpuOpponent({ userTrophies: PLAYER_TROPHIES, matchSeconds: rank.matchSeconds })
+          createCpuOpponent({
+            userTrophies: inv.elo,
+            // 무제한 방은 CPU 의 목표를 잡을 자가 없으니 6시간을 기준으로 둔다.
+            matchSeconds: arena.matchSeconds ?? 6 * 3600,
+          })
         );
         setVsCpu(true);
         setPhase('matchFound');
@@ -368,14 +468,29 @@ export default function BattleLobby({
       clearInterval(interval);
       clearInterval(tip);
     };
-  }, [phase, rank]);
+  }, [phase, arena, inv.elo]);
 
   const startSearching = () => {
+    if (!canEnter) return;
+    // 입장 = 경기 시작. 참가비는 이 순간 지갑에서 빠진다.
+    setSolo(false);
+    void applyLedger({ coins: -arena.entryFee }).then(() => refresh());
     setElapsed(0);
     setVsCpu(false);
     setRival(null);
     setPhase('searching');
     onMatchmakingChange?.(true);
+  };
+
+  /**
+   * 솔로 매치. 참가비 0, ELO 무변동, 당일 공부 게이트도 없다 — 여기가 돌아오는 길이다.
+   * 상대를 찾을 것이 없으니 매칭을 건너뛰고 바로 판으로 들어간다.
+   */
+  const startSolo = () => {
+    setSolo(true);
+    setRival(null);
+    setPhase('lobby');
+    onMatchStart(null, arena, true);
   };
 
   const cancelSearching = () => {
@@ -386,13 +501,13 @@ export default function BattleLobby({
 
   // 오버레이의 1.5초 타이머가 리렌더마다 다시 걸리지 않게 고정해 둔다.
   const handleCountdown = useCallback(() => {
-    if (rival) onMatchStart(rival, rank);
-  }, [onMatchStart, rank, rival]);
+    if (rival) onMatchStart(rival, arena, solo);
+  }, [onMatchStart, arena, solo, rival]);
 
   const player = {
     name: profile?.name?.trim() || 'Focus Knight',
     avatar: profile?.avatar || '🦉',
-    trophies: PLAYER_TROPHIES,
+    trophies: inv.elo,
     title: profile?.title?.trim() || 'Night Scholar',
   };
 
@@ -417,7 +532,7 @@ export default function BattleLobby({
           </View>
         </Tap>
         <View style={styles.headerStats}>
-          <StatPill icon={Trophy} label="Trophies" value={PLAYER_TROPHIES.toLocaleString()} tone="amber" />
+          <StatPill icon={Trophy} label="ELO" value={inv.elo.toLocaleString()} tone="amber" />
           <StatPill icon={Coins} label="Coins" value={coins.toLocaleString()} tone="olive" />
           <Tap
             onPress={onOpenSettings}
@@ -431,36 +546,67 @@ export default function BattleLobby({
       </View>
 
       <View style={styles.content}>
-        <ArenaArt rank={rank} />
+        <ArenaArt rank={arena} overlay={<CouponSlots inv={inv} onPick={setPickingSlot} />} />
 
-        <RankPicker selected={rank} coins={coins} onSelect={setRank} />
+        {promotable && promoteTo ? (
+          <PromotionCard to={promoteTo} onAccept={promote} />
+        ) : (
+          <ArenaStanding current={arena} elo={inv.elo} />
+        )}
 
         <Button
           block
           size="lg"
+          variant={canEnter ? 'primary' : 'outline'}
+          disabled={!canEnter}
           onPress={startSearching}
           accessibilityLabel="Start battle"
           style={styles.battleButton}
         >
           <View style={styles.battleButtonContent}>
-            <View style={styles.battleIcon}>
-              <Swords size={22} color={T.primaryFg} strokeWidth={2.2} />
+            <View style={[styles.battleIcon, !canEnter && styles.battleIconOff]}>
+              <Swords size={22} color={canEnter ? T.primaryFg : T.muted} strokeWidth={2.2} />
             </View>
             <View style={styles.battleCopy}>
-              <Text style={styles.battleText}>Battle</Text>
-              <Text style={styles.battleSubtext}>
-                {rank.name} · {formatMatchLength(rank.matchSeconds)} match · {rank.bet} coins
+              <Text style={[styles.battleText, !canEnter && styles.battleTextOff]}>Battle</Text>
+              <Text style={[styles.battleSubtext, !canEnter && styles.battleSubtextOff]}>
+                {arena.name} · {formatMatchLength(arena.matchSeconds)} match · {arena.entryFee} coins
               </Text>
             </View>
-            <ChevronRight size={22} color={T.primaryFg} strokeWidth={2.4} />
+            <ChevronRight size={22} color={canEnter ? T.primaryFg : T.muted} strokeWidth={2.4} />
           </View>
         </Button>
 
-        <View style={styles.footnote}>
-          <Sprout size={14} color={T.accent} strokeWidth={2} />
-          <Text style={styles.footnoteText}>Every minute you focus grows the garden.</Text>
-        </View>
+        {/* 참가비도 상대도 없는 판. 지갑이 비어도, 몇 번이든 들어올 수 있다. */}
+        <Tap
+          onPress={startSolo}
+          accessibilityLabel={`Solo match, free, earns ${arena.soloReward} coins`}
+          style={styles.solo}
+        >
+          <Dumbbell size={17} color={T.accentDeep} strokeWidth={2.2} />
+          <Text style={styles.soloText}>Solo · free, no rating</Text>
+          <Text style={styles.soloReward}>+{arena.soloReward} coins</Text>
+        </Tap>
+
+        {!canEnter ? (
+          <View style={styles.gate}>
+            <Coins size={15} color={T.danger} strokeWidth={2} />
+            <Text style={styles.gateText}>
+              {arena.entryFee - coins} more coins needed to enter {arena.name}
+            </Text>
+          </View>
+        ) : null}
       </View>
+
+      <CouponPicker
+        slot={pickingSlot}
+        inv={inv}
+        onClose={() => setPickingSlot(null)}
+        onChoose={(id) => {
+          if (pickingSlot !== null) void equipCoupon(pickingSlot, id).then(() => refresh());
+          setPickingSlot(null);
+        }}
+      />
 
       {phase === 'searching' && (
         <SearchOverlay
@@ -543,7 +689,105 @@ const styles = StyleSheet.create({
     letterSpacing: 1.2,
     textTransform: 'uppercase',
   },
-  arenaName: { fontFamily: T.fontDisplay, color: T.ink, fontSize: 15, marginTop: 2, textAlign: 'center' },
+
+  artOverlay: { position: 'absolute', top: 12, left: 12 },
+  slots: { flexDirection: 'row', gap: 8 },
+  slot: {
+    // 정사각형. 그림 위에 얹히므로 바탕을 반투명 흰색으로 깔아 글자가 읽히게.
+    width: 58,
+    height: 58,
+    borderRadius: RADIUS.md,
+    borderWidth: 1,
+    borderStyle: 'dashed',
+    borderColor: T.borderStrong,
+    backgroundColor: 'rgba(255,255,255,0.72)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 4,
+  },
+  slotFilled: {
+    borderStyle: 'solid',
+    borderColor: T.primary,
+    backgroundColor: 'rgba(247,233,203,0.94)',
+  },
+  slotName: {
+    fontFamily: T.fontMedium,
+    fontSize: 10,
+    lineHeight: 13,
+    color: T.primaryDeep,
+    textAlign: 'center',
+  },
+
+  pickerBackdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(34,38,28,0.45)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 24,
+  },
+  pickerFrame: { width: '100%', maxWidth: 360 },
+  picker: { padding: 18, gap: 10 },
+  pickerTitle: {
+    fontFamily: T.fontMedium,
+    fontSize: 12,
+    letterSpacing: 1.1,
+    textTransform: 'uppercase',
+    color: T.muted,
+  },
+  pickerEmpty: { fontFamily: T.font, fontSize: 14, lineHeight: 21, color: T.muted },
+  pickerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    borderRadius: RADIUS.md,
+    backgroundColor: T.cardAlt,
+  },
+  pickerCopy: { flex: 1 },
+  pickerName: { fontFamily: T.fontMedium, fontSize: 15, color: T.ink },
+  pickerEffect: { fontFamily: T.font, fontSize: 12, lineHeight: 17, color: T.muted, marginTop: 2 },
+  pickerCount: { fontFamily: T.fontMedium, fontSize: 14, color: T.accentDeep },
+  pickerClear: { marginTop: 2 },
+
+  standing: { gap: 2 },
+  standingLeft: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  standingName: { fontFamily: T.fontMedium, fontSize: 16 },
+  standingElo: { fontFamily: T.font, fontSize: 13, color: T.muted },
+
+  eloTrack: {
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: T.bgSunk,
+    overflow: 'hidden',
+    marginBottom: 10,
+  },
+  eloFill: { height: '100%', borderRadius: 3, backgroundColor: T.primary },
+
+  promo: { padding: 16, gap: 8 },
+  promoHead: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  promoTitle: { fontFamily: T.fontMedium, fontSize: 17, color: T.primaryDeep },
+  promoBody: { fontFamily: T.font, fontSize: 14, lineHeight: 21, color: T.inkSoft },
+  promoButton: { alignSelf: 'flex-start', marginTop: 4 },
+
+  solo: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 9,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    borderRadius: RADIUS.md,
+    backgroundColor: T.accentSoft,
+  },
+  soloText: { flex: 1, fontFamily: T.fontMedium, fontSize: 15, color: T.accentDeep },
+  soloReward: { fontFamily: T.font, fontSize: 13, color: T.accentDeep, opacity: 0.8 },
+
+  gate: { flexDirection: 'row', alignItems: 'center', gap: 8, justifyContent: 'center' },
+  gateText: { fontFamily: T.fontMedium, fontSize: 14, color: T.inkSoft, textAlign: 'center' },
+
+  battleIconOff: { backgroundColor: T.bgSunk },
+  battleTextOff: { color: T.muted },
+  battleSubtextOff: { color: T.muted },
 
   rankHeader: {
     flexDirection: 'row',
@@ -559,26 +803,7 @@ const styles = StyleSheet.create({
     color: T.muted,
   },
   rankHeaderHint: { fontFamily: T.font, fontSize: 13, color: T.muted },
-  rankRow: { gap: 8, paddingRight: 4 },
-  rankCard: {
-    width: 104,
-    alignItems: 'flex-start',
-    paddingVertical: 10,
-    paddingHorizontal: 11,
-    gap: 3,
-    borderRadius: RADIUS.lg,
-    borderWidth: 1,
-    borderColor: T.border,
-    backgroundColor: T.card,
-  },
-  rankCardLocked: { opacity: 0.5, backgroundColor: T.bgSunk },
-  rankTop: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   rankDot: { width: 8, height: 8, borderRadius: 4 },
-  rankName: { fontFamily: T.fontDisplay, fontSize: 16, color: T.ink },
-  rankMeta: { flexDirection: 'row', alignItems: 'center', gap: 4 },
-  rankMetaText: { fontFamily: T.fontMedium, fontSize: 14, color: T.inkSoft },
-  rankEntry: { fontFamily: T.font, fontSize: 12, color: T.muted, marginTop: 1 },
-  rankLocked: { fontFamily: T.fontMedium, fontSize: 13, color: T.danger },
 
   battleButton: { height: 70, paddingHorizontal: 0 },
   battleButtonContent: {
@@ -601,8 +826,6 @@ const styles = StyleSheet.create({
   battleText: { fontFamily: T.fontDisplay, fontSize: 25, color: T.primaryFg },
   battleSubtext: { fontFamily: T.font, fontSize: 14, color: 'rgba(255,252,244,0.82)', marginTop: 1 },
 
-  footnote: { flexDirection: 'row', alignItems: 'center', gap: 7, justifyContent: 'center' },
-  footnoteText: { fontFamily: T.font, fontSize: 14, color: T.muted },
 
   overlay: {
     ...StyleSheet.absoluteFill,

@@ -2,7 +2,9 @@ import React, { useMemo, useState } from 'react';
 import { ScrollView, StyleSheet, Text, View } from 'react-native';
 import { Check, Coins } from 'lucide-react-native';
 import { Button, Card, RADIUS, T, Tap } from '@/components/nova';
-import { countOf, useInventory } from '@/lib/inventory';
+import { applyLedger, countOf, debugSet, useInventory } from '@/lib/inventory';
+import { ARENAS, arenaById, STARTING_ELO } from '@/lib/arena';
+import { DEFAULT_INVENTORY } from '@/lib/inventory';
 import { SHOP, SHOP_SECTIONS, shopById, type ShopEntry } from '@/lib/shop';
 
 type Pane = 'shop' | 'bag';
@@ -91,9 +93,76 @@ function ShopRow({
   );
 }
 
+// ⚠️ 임시 — 테스트용 판. 규칙을 건너뛰고 재화를 만들어 낸다.
+// 출시 전에 이 컴포넌트와 아래 호출부, lib/inventory 의 debugSet 을 함께 지운다.
+function TestBench({ elo, arenaName, onChange }: { elo: number; arenaName: string; onChange: () => void }) {
+  const give = async (patch: Parameters<typeof applyLedger>[0]) => {
+    await applyLedger(patch);
+    onChange();
+  };
+  const set = async (patch: Parameters<typeof debugSet>[0]) => {
+    await debugSet(patch);
+    onChange();
+  };
+
+  return (
+    <Card level={0} tone="sunk" boxStyle={styles.bench}>
+      <Text style={styles.benchTitle}>Test bench · temporary</Text>
+      <Text style={styles.benchHint}>
+        Free coins and rating for testing. ELO {elo} · {arenaName}. This panel ships nowhere.
+      </Text>
+
+      <View style={styles.benchRow}>
+        <Button size="sm" variant="outline" onPress={() => give({ coins: 100 })}>
+          +100 coins
+        </Button>
+        <Button size="sm" variant="outline" onPress={() => give({ coins: 1000 })}>
+          +1,000 coins
+        </Button>
+      </View>
+
+      <View style={styles.benchRow}>
+        <Button size="sm" variant="outline" onPress={() => give({ elo: elo + 50 })}>
+          +50 ELO
+        </Button>
+        <Button size="sm" variant="outline" onPress={() => give({ elo: Math.max(0, elo - 50) })}>
+          −50 ELO
+        </Button>
+        <Button size="sm" variant="outline" onPress={() => give({ elo: elo + 200 })}>
+          +200 ELO
+        </Button>
+      </View>
+
+      {/* 방을 바로 옮겨 각 티어의 판 길이·참가비를 확인할 때. */}
+      <View style={styles.benchRow}>
+        {ARENAS.map((a) => (
+          <Button
+            key={a.id}
+            size="sm"
+            variant="ghost"
+            onPress={() => set({ arenaId: a.id, elo: Math.max(a.eloFloor, 0) })}
+          >
+            {a.name}
+          </Button>
+        ))}
+      </View>
+
+      <View style={styles.benchRow}>
+        <Button
+          size="sm"
+          variant="outline"
+          onPress={() => set({ ...DEFAULT_INVENTORY, elo: STARTING_ELO })}
+        >
+          Reset everything
+        </Button>
+      </View>
+    </Card>
+  );
+}
+
 export default function Shop() {
   const [pane, setPane] = useState<Pane>('shop');
-  const { inv, buy } = useInventory();
+  const { inv, buy, refresh } = useInventory();
 
   const bag = useMemo(
     () =>
@@ -124,6 +193,9 @@ export default function Shop() {
       <PaneSwitch pane={pane} onChange={setPane} />
 
       <ScrollView contentContainerStyle={styles.list} showsVerticalScrollIndicator={false}>
+        {/* ⚠️ 임시 */}
+        <TestBench elo={inv.elo} arenaName={arenaById(inv.arenaId).name} onChange={refresh} />
+
         {pane === 'shop'
           ? SHOP_SECTIONS.map((section) => {
               const entries = SHOP.filter((e) => e.kind === section.kind);
@@ -221,6 +293,18 @@ const styles = StyleSheet.create({
   ownedText: { fontFamily: T.fontMedium, fontSize: 14, color: T.accentDeep },
   countTag: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: RADIUS.full, backgroundColor: T.accentSoft },
   countText: { fontFamily: T.fontMedium, fontSize: 14, color: T.accentDeep },
+
+  // ⚠️ 임시 — 테스트 판 스타일
+  bench: { padding: 14, gap: 8, borderStyle: 'dashed', borderWidth: 1, borderColor: T.borderStrong },
+  benchTitle: {
+    fontFamily: T.fontMedium,
+    fontSize: 12,
+    letterSpacing: 1,
+    textTransform: 'uppercase',
+    color: T.danger,
+  },
+  benchHint: { fontFamily: T.font, fontSize: 13, lineHeight: 19, color: T.muted },
+  benchRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
 
   empty: { padding: 20 },
   emptyTitle: { fontFamily: T.fontMedium, fontSize: 17, color: T.ink },

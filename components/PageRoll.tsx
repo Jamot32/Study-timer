@@ -3,7 +3,7 @@ import { StyleSheet, Text, View } from 'react-native'
 import Svg, { G, Line, Polygon, Text as SvgText } from 'react-native-svg'
 import { Button, RADIUS, T } from '@/components/nova'
 import { QUOTES } from '@/components/quotes'
-import { highestUnlocked, type Rank } from '@/lib/ranks'
+import { arenaById, type Arena } from '@/lib/arena'
 import { COUPONS, jackpotCoins, type Coupon } from '@/lib/coupons'
 import { useInventory } from '@/lib/inventory'
 
@@ -316,7 +316,7 @@ type Draw =
   | { kind: 'time'; label: string; minutes: number }
   | { kind: 'coupon'; coupon: Coupon; coins: number }
 
-function drawFor(seed: number, rank: Rank): Draw {
+function drawFor(seed: number, rank: Arena): Draw {
   const h = hash(seed)
   // 최하위 비트로 50:50. 나머지 비트는 무엇이 나올지 고르는 데 쓴다.
   if (h % 2 === 0) {
@@ -411,7 +411,7 @@ function quoteLines(seed: number, draw: Draw): TextLine[] {
 }
 
 // 오른쪽 쪽: 이번에 뽑은 것 하나. 시간이면 액수를, 쿠폰이면 이름과 효과를.
-function rewardLines(draw: Draw, rank: Rank): TextLine[] {
+function rewardLines(draw: Draw, rank: Arena): TextLine[] {
   const blank = { text: '', size: LIST_FONT, color: T.ink, align: 'start' as const }
 
   if (draw.kind === 'time') {
@@ -447,9 +447,9 @@ function rewardLines(draw: Draw, rank: Rank): TextLine[] {
 
 // onFocusChange: ROLL 로 책에 집중하는 동안 true. 바깥(탭 바)도 같이 치우라고 알린다.
 export default function PageRoll({ onFocusChange }: { onFocusChange?: (focused: boolean) => void } = {}) {
-  // 보상 크기의 기준. 지금 지갑(상점과 같은 저장소)으로 설 수 있는 가장 높은 티어를 따른다.
+  // 보상 크기의 기준. 지금 서 있는 방을 따른다 — 긴 판을 뛰는 사람이 크게 쉰다.
   const { inv } = useInventory()
-  const playerRank = highestUnlocked(inv.coins)
+  const playerRank = arenaById(inv.arenaId)
   const [scene, setScene] = useState<Scene>(SHUT)
   // idle: 제목과 ROLL 이 보이는 첫 화면. 책장은 보이지만 만질 수 없다.
   // shelf: ROLL 을 눌러 책장만 남은 상태. 여기서만 책을 고를 수 있다.

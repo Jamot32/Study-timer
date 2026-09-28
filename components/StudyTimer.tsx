@@ -10,7 +10,12 @@ import { type Profile } from '../lib/auth'
 import { Avatar } from './Avatar'
 import ConfirmDialog from './PixelConfirm'
 import { Button, Card, ProgressBar, RADIUS, T } from './nova'
-import { formatMatchLength, type Rank } from '../lib/ranks'
+import { arenaById, formatMatchLength, type Arena } from '../lib/arena'
+import { payoutForFinishedSession, rescueTopUp } from '../lib/economy'
+import { computeFp } from '../lib/match'
+import { applyLedger, loadInventory } from '../lib/inventory'
+import { studiedMinutesToday, useStudiedToday } from '../lib/today'
+import { dayKey } from '../lib/sessions'
 import {
   cpuStatusLabel,
   initialCpuState,
@@ -37,7 +42,7 @@ const SKY_START = 0.22
 const BREAK_EARN_SECONDS = HOUR_SECONDS
 
 // ---------- 대전 ----------
-// 티어가 없을 때 쓰는 기본 판 길이. 보통은 rank.matchSeconds 가 이 값을 대신한다.
+// 방이 없을 때(연습 등) 쓰는 기본 판 길이. 보통은 arena.matchSeconds 가 이 값을 대신한다.
 const BATTLE_MAX_SECONDS = 5 * 3600
 // 집중 1분에 H-Coin 하나.
 const COIN_SECONDS = 60
@@ -162,6 +167,13 @@ const formatTime = (totalSeconds: number) => {
   return `${h}:${m}:${s}`
 }
 
+/** '4h 12m' / '48m'. 기록과 매치 시간을 나란히 읽히게 하는 짧은 표기. */
+const formatSpan = (totalSeconds: number) => {
+  const hours = Math.floor(totalSeconds / 3600)
+  const minutes = Math.floor((totalSeconds % 3600) / 60)
+  return hours > 0 ? `${hours}h ${minutes}m` : `${minutes}m`
+}
+
 const formatWeeklyMax = (totalSeconds: number) => {
   const h = Math.floor(totalSeconds / 3600)
   const m = Math.floor((totalSeconds % 3600) / 60)
@@ -245,6 +257,52 @@ function DialRing({
   )
 }
 
+/**
+ * 끝낸 세션을 코인으로 바꿔 지갑에 넣는다.
+ * 규칙은 lib/economy 가 정하고 여기서는 오늘 누적과 지갑 상한만 채워 넘긴다.
+ * 공부 시간 자체는 이미 lib/sessions 에 저장된 뒤라 여기서 건드릴 것이 없다.
+ */
+async function payForSession(durationMs: number) {
+  const minutes = Math.floor(durationMs / 60000)
+  const [inv, studiedToday] = await Promise.all([loadInventory(), studiedMinutesToday()])
+  const today = dayKey(new Date())
+
+  const payout = payoutForFinishedSession({
+    minutes,
+    studiedTodayMinutes: studiedToday,
+    coins: inv.coins,
+    walletCap: arenaById(inv.arenaId).walletCap,
+    firstBonusDay: inv.firstBonusDay,
+    today,
+  })
+  // 참가비도 못 내는 상태라면 25분 하나로 다시 설 수 있게 끌어올린다.
+  const arena = arenaById(inv.arenaId)
+  const rescue = rescueTopUp({
+    minutes,
+    coins: inv.coins,
+    entryFee: arena.entryFee,
+    normalPayout: payout.coins,
+  })
+  if (payout.coins === 0 && payout.honor === 0 && rescue === 0) return payout
+
+  await applyLedger({
+    coins: payout.coins + rescue,
+    honor: payout.honor,
+    firstBonusDay: today,
+  })
+  return payout
+}
+
+/** 한 판이 끝났을 때 위로 올려 보내는 것. 정산과 판정은 App 이 한다. */
+export type MatchSummary = {
+  mySeconds: number
+  theirSeconds: number
+  myFp: number
+  theirFp: number
+  /** 항복으로 끝났는지. 항복은 FP 와 무관하게 패배로 친다. */
+  resigned: boolean
+}
+
 // ---------- 메인 컴포넌트 ----------
 export function StudyTimer({
   onFinished,
@@ -252,19 +310,20 @@ export function StudyTimer({
   onResign,
   matchStarting = false,
   opponent,
-  rank,
+  arena,
   profile,
 }: {
-  onFinished?: () => void
+  /** 판이 끝났다. 배틀이었다면 판정에 필요한 값이 실려 온다. */
+  onFinished?: (summary?: MatchSummary) => void
   onOpenProfile?: () => void
-  /** Give up the match: drops the session unsaved and hands the screen back. */
-  onResign?: () => void
+  /** 항복. 진행 중인 세션은 버리지만, 그때까지 쌓은 매치 시간으로 정산은 한다. */
+  onResign?: (summary: MatchSummary) => void
   /** 3-2-1 카운트다운이 도는 중. 끝나기 전까지는 상대 시계도 멈춰 있다. */
   matchStarting?: boolean
   /** 이번 판의 상대. 매칭 때 지어진 CPU 가 그대로 넘어온다. */
   opponent?: CpuOpponent | null
   /** 이번 판의 티어. 판 길이와 판돈이 여기서 온다. */
-  rank?: Rank | null
+  arena?: Arena | null
   /** Logged-in profile; drives the header avatar, outer line, title and name. */
   profile?: Profile
 }) {
@@ -298,11 +357,17 @@ export function StudyTimer({
     setWeeklyMax((maximum) => Math.max(maximum, focusElapsed))
   }, [focusElapsed, onBreak])
 
+  // 오늘 기록에 쌓인 공부 시간. 매치와 무관하게 흘러간 것까지 전부.
+  // 세션이 끝날 때마다 다시 읽는다.
+  const [payoutKey, setPayoutKey] = useState(0)
+  const { minutes: studiedTodayMinutes } = useStudiedToday(payoutKey)
+
   // 배틀 중일 때만 상대 시계가 돈다. 3-2-1 카운트다운이 끝나야 비로소 출발한다.
   const inBattle = onResign !== undefined
   const opponentElapsed = cpu?.studiedSeconds ?? 0
-  // 판 길이는 티어가 정한다 — Iron 30분에서 Challenger 5시간까지.
-  const matchSeconds = rank?.matchSeconds ?? BATTLE_MAX_SECONDS
+  // 판 길이는 방이 정한다 — 브론즈 1시간에서 다이아 무제한까지.
+  // 무제한(null)이면 스스로 끝나지 않는다. 끝내는 건 유저다.
+  const matchSeconds = arena ? arena.matchSeconds : BATTLE_MAX_SECONDS
 
   // 상대가 바뀌면(=새 판) 상태를 처음부터 세운다.
   useEffect(() => {
@@ -343,7 +408,9 @@ export function StudyTimer({
   const hoursDone = Math.floor(elapsed / HOUR_SECONDS)
   const lapColors = LAP_COLORS[Math.min(hoursDone, LAP_COLORS.length - 1)]
   // 상대 불꽃도 같은 바퀴 위에 선다. 앞뒤 차이는 위쪽 격차 숫자로 읽는다.
-  const opponentProgress = inBattle ? (opponentElapsed % HOUR_SECONDS) / HOUR_SECONDS : null
+  // 솔로에는 상대가 없다. 상대 고리·불꽃·칩·FP 비교를 통째로 끈다.
+  const hasRival = inBattle && opponent !== null
+  const opponentProgress = hasRival ? (opponentElapsed % HOUR_SECONDS) / HOUR_SECONDS : null
   // 불꽃 아이콘은 SVG 밖에 겹쳐 놓는다. 링 위 좌표만 미리 뽑아 둔다.
   const rivalPoint = opponentProgress === null ? null : pointOn(opponentProgress, RING_R)
   // 상대가 쌓은 시간만큼 불꽃이 커지고 색이 밝아진다.
@@ -357,6 +424,9 @@ export function StudyTimer({
   // 내가 앞서면 양수. 브레이크 시간은 대전에 안 들어간다.
   const lead = focusElapsed - opponentElapsed
   const coins = Math.floor(focusElapsed / COIN_SECONDS)
+  // 승패를 가르는 값. 공부 시간이 아니라 이쪽이 겨뤄진다.
+  const myFp = computeFp({ matchSeconds: focusElapsed }).total
+  const theirFp = computeFp({ matchSeconds: opponentElapsed }).total
   const paused = !onBreak && !isRunning && elapsedMs > 0
 
   const breakLabel = breakBank > 0 ? `${breakBank} minutes banked` : 'No break banked yet'
@@ -385,14 +455,40 @@ export function StudyTimer({
     try {
       const session = await finish()
       earnedHours.current = 0
-      if (session !== null) onFinished?.()
+      if (session !== null) {
+        await payForSession(session.durationMs)
+        setPayoutKey((k) => k + 1)
+        onFinished?.(
+          inBattle
+            ? {
+                mySeconds: focusElapsed,
+                theirSeconds: opponentElapsed,
+                myFp,
+                theirFp,
+                resigned: false,
+              }
+            : undefined
+        )
+      }
     } catch (error) {
       console.error('Failed to finish session:', error)
       Alert.alert('Error', 'Failed to save session.')
     } finally {
       setIsFinishing(false)
     }
-  }, [elapsedMs, endBreak, finish, isFinishing, onBreak, onFinished])
+  }, [
+    elapsedMs,
+    endBreak,
+    finish,
+    inBattle,
+    isFinishing,
+    focusElapsed,
+    myFp,
+    onBreak,
+    onFinished,
+    opponentElapsed,
+    theirFp,
+  ])
 
   // 대전은 카운트다운이 끝나는 순간 알아서 출발한다. 직접 누를 필요 없다.
   const autoStarted = useRef(false)
@@ -409,7 +505,7 @@ export function StudyTimer({
 
   // 티어의 판 길이를 채우면 판이 스스로 끝난다. 시간은 저장된다.
   useEffect(() => {
-    if (!inBattle || onBreak) return
+    if (!inBattle || onBreak || matchSeconds === null) return
     if (focusElapsed >= matchSeconds) handleFinish()
   }, [focusElapsed, handleFinish, inBattle, matchSeconds, onBreak])
 
@@ -497,13 +593,21 @@ export function StudyTimer({
   // 확인창은 OS 기본 Alert 대신 앱 모달(ConfirmDialog)로 띄운다.
   const giveUp = () => {
     setConfirmResign(false)
+    // 항복해도 그때까지 앉아 있던 시간만큼은 환급 대상이다.
+    const summary: MatchSummary = {
+      mySeconds: focusElapsed,
+      theirSeconds: opponentElapsed,
+      myFp,
+      theirFp,
+      resigned: true,
+    }
     resetFocus()
     earnedHours.current = 0
     setStreakBroken(false)
     setBreakElapsed(0)
     setMode('FOCUS')
     setCpu(opponent ? initialCpuState(opponent) : null)
-    onResign?.()
+    onResign?.(summary)
   }
 
   // 시간이 0이어도 묻는다 — 항복은 눌렀다고 바로 나가 버리면 안 되는 동작.
@@ -548,7 +652,7 @@ export function StudyTimer({
           </View>
 
           {/* 상대 시계는 눌러서 보는 게 아니라 늘 작게 붙어 있다. */}
-          {inBattle && (
+          {hasRival && (
             <View style={styles.rivalChip}>
               <Text style={styles.rivalLabel} numberOfLines={1}>
                 {rivalName}
@@ -566,9 +670,10 @@ export function StudyTimer({
             <Text style={styles.statusText}>
               {isRunning ? 'In session' : 'Ready when you are'}
             </Text>
-            {rank && (
-              <Text style={[styles.rankLine, { color: rank.color }]}>
-                {rank.name} · {formatMatchLength(rank.matchSeconds)} match · {rank.bet} coins staked
+            {arena && (
+              <Text style={[styles.rankLine, { color: arena.color }]}>
+                {arena.name} · {formatMatchLength(arena.matchSeconds)} match ·{' '}
+                {hasRival ? `${arena.entryFee} coins staked` : `solo, +${arena.soloReward} on finish`}
               </Text>
             )}
           </View>
@@ -577,6 +682,29 @@ export function StudyTimer({
             <Text style={styles.weeklyValue}>{formatWeeklyMax(weeklyMax)}</Text>
           </Card>
         </View>
+
+        {/* 기록과 매치를 나란히 둔다. 4원화 설계의 물리적 구현이라
+            합치거나 한쪽만 보여 주는 순간 "시간을 깎였다"는 오해가 생긴다.
+            이 자리는 어떤 레이아웃 변경에도 양보하지 않는다. */}
+        {inBattle && (
+          <Card level={0} tone="alt" radius={RADIUS.md} boxStyle={styles.truthBar}>
+            <View style={styles.truthCell}>
+              <Text style={styles.truthLabel}>Studied today</Text>
+              <Text style={styles.truthValue}>{formatSpan(studiedTodayMinutes * 60)}</Text>
+              <Text style={styles.truthNote}>kept forever</Text>
+            </View>
+            <View style={styles.truthDivider} />
+            <View style={styles.truthCell}>
+              <Text style={styles.truthLabel}>Counts in this match</Text>
+              <Text style={[styles.truthValue, { color: T.primaryDeep }]}>
+                {formatSpan(focusElapsed)}
+              </Text>
+              <Text style={styles.truthNote}>
+                {myFp} FP{hasRival ? ` · rival ${theirFp}` : ''}
+              </Text>
+            </View>
+          </Card>
+        )}
 
         {/* 다이얼 */}
         <View style={styles.dialWrap}>
@@ -591,8 +719,8 @@ export function StudyTimer({
             <View style={[ABS_FILL, { backgroundColor: DIAL.base, opacity: SKY_DIM }]} />
             <DialRing progress={hourProgress} colors={lapColors} opponent={opponentProgress} heat={flameHeat} />
             <View style={styles.dialContent}>
-              {/* 위: 대전이면 격차, 아니면 지금 붙잡고 있는 과목 */}
-              {inBattle ? (
+              {/* 위: 상대가 있으면 격차, 아니면 지금 붙잡고 있는 과목 */}
+              {hasRival ? (
                 <View style={styles.dialTop}>
                   <Text style={[styles.gapText, { color: lead >= 0 ? DIAL.gauge : DIAL.amber }]}>
                     {lead >= 0 ? '▲' : '▼'} {lead >= 0 ? '+' : '-'}
@@ -817,6 +945,25 @@ const styles = StyleSheet.create({
     color: T.muted,
   },
   weeklyValue: { fontFamily: T.fontDisplay, fontSize: 19, color: T.ink, marginTop: 2 },
+
+  truthBar: {
+    flexDirection: 'row',
+    alignItems: 'stretch',
+    paddingVertical: 12,
+    paddingHorizontal: 14,
+    marginTop: 14,
+  },
+  truthCell: { flex: 1, gap: 2 },
+  truthDivider: { width: 1, backgroundColor: T.border, marginHorizontal: 12 },
+  truthLabel: {
+    fontFamily: T.fontMedium,
+    fontSize: 12,
+    letterSpacing: 0.8,
+    textTransform: 'uppercase',
+    color: T.muted,
+  },
+  truthValue: { fontFamily: T.fontDisplay, fontSize: 22, color: T.ink },
+  truthNote: { fontFamily: T.font, fontSize: 12, color: T.muted },
 
   dialWrap: { alignSelf: 'center', marginTop: 22 },
   dial: {
