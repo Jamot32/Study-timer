@@ -34,14 +34,33 @@ import {
   type Arena,
 } from '../lib/arena';
 import { PROMOTION_GIFT_MULTIPLIER } from '../lib/economy';
-import { applyLedger, countOf, equipCoupon, useInventory, type Inventory } from '../lib/inventory';
-import { COUPONS, type Coupon } from '../lib/coupons';
+import {
+  applyLedger,
+  countOf,
+  enterMatch,
+  equipCoupon,
+  matchCouponsFor,
+  returnCoupons,
+  useInventory,
+  type Inventory,
+} from '../lib/inventory';
+import { COUPONS, type Coupon, type CouponId } from '../lib/coupons';
+import { COUPON_USE } from '../lib/couponEffects';
+import { couponsAllowed } from '../lib/match';
 
 type BattlePhase = 'lobby' | 'searching' | 'matchFound';
 
 type BattleLobbyProps = {
   /** 매치가 잡혔다. 카운트다운부터는 App 이 타이머 화면 위에서 이어 간다. */
-  onMatchStart: (opponent: CpuOpponent | null, arena: Arena, solo: boolean) => void;
+  onMatchStart: (
+    opponent: CpuOpponent | null,
+    arena: Arena,
+    solo: boolean,
+    /** 판에 들고 들어가 이미 한 장씩 빠진 쿠폰. */
+    coupons: CouponId[],
+    /** 실제로 낸 참가비. 자유 이용권이면 0. */
+    entryPaid: number
+  ) => void;
   /** 매칭을 걸었는지(=탭을 잠가야 하는지) 알린다. */
   onMatchmakingChange?: (searching: boolean) => void;
   /** 프로필(아바타·이름)을 누르면 편집으로. */
@@ -175,7 +194,8 @@ function ArenaArt({ rank, overlay }: { rank: Arena; overlay?: React.ReactNode })
 
 /**
  * 판에 들고 들어갈 쿠폰 두 자리.
- * 아직 효과가 붙지는 않았다 — 무엇을 챙겼는지 보이고 고르는 데까지다.
+ * 입장하는 순간 끼워 둔 쿠폰이 한 장씩 빠지고 효과가 이번 판에 걸린다.
+ * 남은 장이 있으면 슬롯에 그대로 남아 다음 판에도 따라간다.
  */
 function CouponSlots({
   inv,
@@ -224,7 +244,8 @@ function CouponPicker({
   onClose: () => void;
   onChoose: (id: string | null) => void;
 }) {
-  const owned = COUPONS.filter((c) => countOf(inv, c.id) > 0);
+  // 슬롯에 끼우는 쿠폰만. 가방에서 쓰는 것·알아서 도는 것은 여기 오지 않는다.
+  const owned = COUPONS.filter((c) => COUPON_USE[c.id] === 'slot' && countOf(inv, c.id) > 0);
   return (
     <Modal visible={slot !== null} transparent animationType="fade" onRequestClose={onClose}>
       <Tap onPress={onClose} style={styles.pickerBackdrop}>
@@ -416,8 +437,18 @@ export default function BattleLobby({
   const arena = arenaById(inv.arenaId);
   // 쿠폰 자리를 누르면 열리는 고르기 창.
   const [pickingSlot, setPickingSlot] = useState<0 | 1 | null>(null);
-  // 랭크전에 필요한 건 참가비뿐이다.
-  const canEnter = coins >= arena.entryFee;
+  // 랭크전에 필요한 건 참가비뿐이다. 자유 이용권을 끼웠으면 그것도 필요 없다.
+  const rankedCoupons = matchCouponsFor(inv, arena, false);
+  const freeTicket = rankedCoupons.includes('freeEntry');
+  const canEnter = freeTicket || coins >= arena.entryFee;
+  // 매칭을 거는 순간 들고 들어간 쿠폰과 실제로 낸 참가비. 판이 잡히면 App 으로 넘어간다.
+  const carried = useRef<Promise<{ coupons: CouponId[]; entryPaid: number }>>(
+    Promise.resolve({ coupons: [], entryPaid: 0 })
+  );
+  const [entry, setEntry] = useState<{ coupons: CouponId[]; entryPaid: number }>({
+    coupons: [],
+    entryPaid: 0,
+  });
   const promotable = canPromote(inv.elo, inv.arenaId);
   const promoteTo = nextArena(inv.arenaId);
 
@@ -472,9 +503,13 @@ export default function BattleLobby({
 
   const startSearching = () => {
     if (!canEnter) return;
-    // 입장 = 경기 시작. 참가비는 이 순간 지갑에서 빠진다.
+    // 입장 = 경기 시작. 참가비는 이 순간 지갑에서 빠지고, 끼워 둔 쿠폰도 한 장씩 빠진다.
     setSolo(false);
-    void applyLedger({ coins: -arena.entryFee }).then(() => refresh());
+    carried.current = enterMatch(arena, false).then(({ coupons, entryPaid }) => {
+      setEntry({ coupons, entryPaid });
+      refresh();
+      return { coupons, entryPaid };
+    });
     setElapsed(0);
     setVsCpu(false);
     setRival(null);
@@ -490,19 +525,28 @@ export default function BattleLobby({
     setSolo(true);
     setRival(null);
     setPhase('lobby');
-    onMatchStart(null, arena, true);
+    void enterMatch(arena, true).then(({ coupons }) => {
+      refresh();
+      onMatchStart(null, arena, true, coupons, 0);
+    });
   };
 
   const cancelSearching = () => {
     setElapsed(0);
     setPhase('lobby');
     onMatchmakingChange?.(false);
+    // 판이 열리지 않았으니 쿠폰은 돌려준다. 참가비는 입장 규칙대로 돌려주지 않는다.
+    // 입장 정산이 아직 끝나지 않았어도 그 결과를 기다렸다가 돌려준다.
+    const entering = carried.current;
+    carried.current = Promise.resolve({ coupons: [], entryPaid: 0 });
+    setEntry({ coupons: [], entryPaid: 0 });
+    void entering.then(({ coupons }) => returnCoupons(coupons)).then(() => refresh());
   };
 
   // 오버레이의 1.5초 타이머가 리렌더마다 다시 걸리지 않게 고정해 둔다.
   const handleCountdown = useCallback(() => {
-    if (rival) onMatchStart(rival, arena, solo);
-  }, [onMatchStart, arena, solo, rival]);
+    if (rival) onMatchStart(rival, arena, solo, entry.coupons, entry.entryPaid);
+  }, [onMatchStart, arena, solo, rival, entry]);
 
   const player = {
     name: profile?.name?.trim() || 'Focus Knight',
@@ -570,7 +614,8 @@ export default function BattleLobby({
             <View style={styles.battleCopy}>
               <Text style={[styles.battleText, !canEnter && styles.battleTextOff]}>Battle</Text>
               <Text style={[styles.battleSubtext, !canEnter && styles.battleSubtextOff]}>
-                {arena.name} · {formatMatchLength(arena.matchSeconds)} match · {arena.entryFee} coins
+                {arena.name} · {formatMatchLength(arena.matchSeconds)} match ·{' '}
+                {freeTicket ? 'free with ticket' : `${arena.entryFee} coins`}
               </Text>
             </View>
             <ChevronRight size={22} color={canEnter ? T.primaryFg : T.muted} strokeWidth={2.4} />
@@ -587,6 +632,12 @@ export default function BattleLobby({
           <Text style={styles.soloText}>Solo · free, no rating</Text>
           <Text style={styles.soloReward}>+{arena.soloReward} coins</Text>
         </Tap>
+
+        {!couponsAllowed(arena) && inv.equipped.some(Boolean) ? (
+          <Text style={styles.couponsOff}>
+            Coupons are off in {arena.name} ranked matches. Golden Hour still works in solo.
+          </Text>
+        ) : null}
 
         {!canEnter ? (
           <View style={styles.gate}>
@@ -783,6 +834,7 @@ const styles = StyleSheet.create({
   soloReward: { fontFamily: T.font, fontSize: 13, color: T.accentDeep, opacity: 0.8 },
 
   gate: { flexDirection: 'row', alignItems: 'center', gap: 8, justifyContent: 'center' },
+  couponsOff: { fontFamily: T.font, fontSize: 13, color: T.muted, textAlign: 'center' },
   gateText: { fontFamily: T.fontMedium, fontSize: 14, color: T.inkSoft, textAlign: 'center' },
 
   battleIconOff: { backgroundColor: T.bgSunk },

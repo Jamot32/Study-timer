@@ -4,8 +4,8 @@ import Svg, { G, Line, Polygon, Text as SvgText } from 'react-native-svg'
 import { Button, RADIUS, T } from '@/components/nova'
 import { QUOTES } from '@/components/quotes'
 import { arenaById, type Arena } from '@/lib/arena'
-import { COUPONS, jackpotCoins, type Coupon } from '@/lib/coupons'
-import { useInventory } from '@/lib/inventory'
+import { jackpotCoins, rollCoupon, type Coupon } from '@/lib/coupons'
+import { claimRoll, rollTicketsNow, useInventory } from '@/lib/inventory'
 
 // ============================================================
 // PAGE ROLL — 무작위 페이지 뽑기
@@ -324,7 +324,7 @@ function drawFor(seed: number, rank: Arena): Draw {
     const { label, weight } = REWARDS[pickIndex]
     return { kind: 'time', label, minutes: rewardMinutes(rank.breakMinutes, weight) }
   }
-  const coupon = COUPONS[(h >>> 1) % COUPONS.length]
+  const coupon = rollCoupon(h >>> 1)
   return { kind: 'coupon', coupon, coins: jackpotCoins(h >>> 6) }
 }
 
@@ -424,6 +424,10 @@ function rewardLines(draw: Draw, rank: Arena): TextLine[] {
       ...wrap(draw.label + ', guilt-free', LIST_CHARS).map((t) => ({
         text: t, size: LIST_FONT, color: T.muted, align: 'start' as const,
       })),
+      blank,
+      ...wrap('Saved to your break bank. Spend it on the timer.', LIST_CHARS).map((t) => ({
+        text: t, size: LIST_FONT, color: T.ink, align: 'start' as const,
+      })),
     ]
   }
 
@@ -448,8 +452,11 @@ function rewardLines(draw: Draw, rank: Arena): TextLine[] {
 // onFocusChange: ROLL 로 책에 집중하는 동안 true. 바깥(탭 바)도 같이 치우라고 알린다.
 export default function PageRoll({ onFocusChange }: { onFocusChange?: (focused: boolean) => void } = {}) {
   // 보상 크기의 기준. 지금 서 있는 방을 따른다 — 긴 판을 뛰는 사람이 크게 쉰다.
-  const { inv } = useInventory()
+  const { inv, refresh } = useInventory()
   const playerRank = arenaById(inv.arenaId)
+  // 뽑기권은 하루에 한 장씩 쌓인다. 한 장도 없으면 ROLL 은 내일까지 닫힌다.
+  const tickets = rollTicketsNow(inv)
+  const spent = tickets <= 0
   const [scene, setScene] = useState<Scene>(SHUT)
   // idle: 제목과 ROLL 이 보이는 첫 화면. 책장은 보이지만 만질 수 없다.
   // shelf: ROLL 을 눌러 책장만 남은 상태. 여기서만 책을 고를 수 있다.
@@ -549,9 +556,9 @@ export default function PageRoll({ onFocusChange }: { onFocusChange?: (focused: 
 
   // ROLL = 책장만 남기고 책을 고르게 한다.
   const roll = useCallback(() => {
-    if (busy || mode !== 'idle') return
+    if (busy || mode !== 'idle' || spent) return
     setMode('shelf')
-  }, [busy, mode])
+  }, [busy, mode, spent])
 
   // 책을 덮고 책장에 도로 꽂은 뒤 첫 화면으로. 책장만 보던 중이면 바로 첫 화면.
   const reset = useCallback(() => {
@@ -579,6 +586,7 @@ export default function PageRoll({ onFocusChange }: { onFocusChange?: (focused: 
   }, [busy, mode, pages])
 
   // SELECT: 책이 땅에 붙게 눕고, 고른 두 쪽만 위로 올라온다. 다 읽고 BACK 을 누르면 책장으로.
+  // 고른 순간 보상이 들어간다 — 쿠폰은 가방으로, 주사위는 코인으로.
   const toggleFlat = useCallback(() => {
     if (busy || !pick) return
     if (mode === 'flat') reset()
@@ -586,8 +594,16 @@ export default function PageRoll({ onFocusChange }: { onFocusChange?: (focused: 
       setHover(null)
       setMode('flat')
       animate(flatScene(pick.lo, pick.hi))
+      if (draw) {
+        void claimRoll(
+          draw.kind === 'coupon'
+            ? { coupon: draw.coupon.id, coins: draw.coins }
+            : { breakMinutes: draw.minutes }
+        )
+          .then(refresh)
+      }
     }
-  }, [busy, pick, mode, animate, reset])
+  }, [busy, pick, mode, animate, reset, draw, refresh])
 
   const flat = mode === 'flat'
   const { tilt, panX, theta, cover, back } = scene
@@ -912,6 +928,7 @@ export default function PageRoll({ onFocusChange }: { onFocusChange?: (focused: 
             <Text style={styles.title} accessibilityRole="header">Page roll</Text>
             <Text style={styles.sub}>
               Roll, then pick a book off the shelf. It opens somewhere — tap a leaf, then select.
+              A ticket a day, and they pile up. Coupons go straight to your bag.
             </Text>
           </View>
 
@@ -944,8 +961,8 @@ export default function PageRoll({ onFocusChange }: { onFocusChange?: (focused: 
           {flat ? 'Back' : 'Select'}
         </Button>
       ) : mode === 'idle' ? (
-        <Button size="lg" onPress={roll} disabled={busy} accessibilityLabel="Roll for a page" style={styles.action}>
-          Roll
+        <Button size="lg" onPress={roll} disabled={busy || spent} accessibilityLabel="Roll for a page" style={styles.action}>
+          {spent ? 'Next ticket tomorrow' : `Roll · ${tickets} ticket${tickets === 1 ? '' : 's'}`}
         </Button>
       ) : null}
     </View>

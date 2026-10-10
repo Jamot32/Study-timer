@@ -5,6 +5,12 @@ import { Button, Card, RADIUS, T } from '@/components/nova';
 import type { Arena } from '@/lib/arena';
 import type { MatchOutcome, Settlement } from '@/lib/match';
 
+/**
+ * 들고 들어간 쿠폰 하나가 이번 판에 한 일.
+ * coins 는 그 쿠폰 덕에 생긴 코인, inNet 이면 위 정산의 Net 에 이미 들어간 몫이다.
+ */
+export type CouponNote = { name: string; text: string; coins?: number; inNet?: boolean };
+
 export type MatchResultData = {
   arena: Arena;
   outcome: MatchOutcome;
@@ -16,8 +22,17 @@ export type MatchResultData = {
   myFp: number;
   theirFp: number;
   settlement: Settlement;
+  /** 실제로 낸 참가비. 자유 이용권이면 0. */
+  entryPaid: number;
+  /** 이번 판으로 지갑이 움직인 순증감. 쿠폰 몫까지 포함. */
+  net: number;
+  couponNotes: CouponNote[];
   eloBefore: number;
   eloAfter: number;
+  /** 랭크전 연승. 솔로면 null. */
+  winStreak: number | null;
+  /** 연속 공부 일수. */
+  studyStreak: number;
   /** 오늘 기록에 쌓인 총 공부 분. 화면 맨 아래에서 마지막으로 읽히는 숫자. */
   studiedTodayMinutes: number;
 };
@@ -93,8 +108,10 @@ export default function MatchResult({
         </View>
         {solo ? (
           <Line label="Solo — nothing staked" value="0" />
+        ) : data.entryPaid === 0 ? (
+          <Line label="Entry — ticket" value="0" />
         ) : (
-          <Line label="Entry paid" value={`−${arena.entryFee}`} tone="bad" />
+          <Line label="Entry paid" value={`−${data.entryPaid}`} tone="bad" />
         )}
         {settlement.myRefund > 0 && (
           <Line
@@ -110,14 +127,28 @@ export default function MatchResult({
             tone="good"
           />
         )}
+        {data.couponNotes
+          .filter((note) => note.inNet && note.coins)
+          .map((note) => (
+            <Line key={note.name} label={note.name} value={`+${note.coins}`} tone="good" />
+          ))}
         <View style={styles.rule} />
-        <Line
-          label="Net"
-          value={signed(settlement.myNet)}
-          tone={settlement.myNet >= 0 ? 'good' : 'bad'}
-          strong
-        />
+        <Line label="Net" value={signed(data.net)} tone={data.net >= 0 ? 'good' : 'bad'} strong />
       </Card>
+
+      {data.couponNotes.length > 0 && (
+        <Card level={1} boxStyle={styles.card}>
+          <Text style={styles.cardTitle}>Coupons</Text>
+          {data.couponNotes.map((note) => (
+            <Line
+              key={note.name}
+              label={`${note.name} — ${note.text}`}
+              value={note.coins ? `+${note.coins}` : '—'}
+              tone={note.coins ? 'good' : 'plain'}
+            />
+          ))}
+        </Card>
+      )}
 
       <Card level={1} boxStyle={styles.card}>
         <Text style={styles.cardTitle}>Rating</Text>
@@ -129,6 +160,9 @@ export default function MatchResult({
           value={eloMove === 0 ? 'no change' : signed(eloMove)}
           tone={eloMove > 0 ? 'good' : eloMove < 0 ? 'bad' : 'plain'}
         />}
+        {data.winStreak !== null && (
+          <Line label="Win streak" value={`${data.winStreak}`} tone={data.winStreak > 0 ? 'good' : 'plain'} />
+        )}
       </Card>
 
       {/* 패배 직후 가장 마지막으로 읽는 문장이 "잃지 않은 것"이 되게 한다. */}
@@ -136,7 +170,10 @@ export default function MatchResult({
         <Text style={styles.keepTitle}>
           {span(data.studiedTodayMinutes * 60)} studied today
         </Text>
-        <Text style={styles.keepBody}>Your record keeps every second of it.</Text>
+        <Text style={styles.keepBody}>
+          Your record keeps every second of it.
+          {data.studyStreak > 1 ? ` ${data.studyStreak} days in a row.` : ''}
+        </Text>
       </Card>
 
       <Button block size="lg" onPress={onDone} style={styles.done}>

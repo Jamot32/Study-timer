@@ -13,7 +13,9 @@ import { Button, Card, ProgressBar, RADIUS, T } from './nova'
 import { arenaById, formatMatchLength, type Arena } from '../lib/arena'
 import { payoutForFinishedSession, rescueTopUp } from '../lib/economy'
 import { computeFp } from '../lib/match'
-import { applyLedger, loadInventory } from '../lib/inventory'
+import { applyLedger, creditCoins, loadInventory, spendBankedBreak } from '../lib/inventory'
+import { goldenHourBonus } from '../lib/couponEffects'
+import { COUPONS, type CouponId } from '../lib/coupons'
 import { studiedMinutesToday, useStudiedToday } from '../lib/today'
 import { dayKey } from '../lib/sessions'
 import {
@@ -262,7 +264,7 @@ function DialRing({
  * 규칙은 lib/economy 가 정하고 여기서는 오늘 누적과 지갑 상한만 채워 넘긴다.
  * 공부 시간 자체는 이미 lib/sessions 에 저장된 뒤라 여기서 건드릴 것이 없다.
  */
-async function payForSession(durationMs: number) {
+async function payForSession(durationMs: number, golden: boolean): Promise<{ goldenBonus: number }> {
   const minutes = Math.floor(durationMs / 60000)
   const [inv, studiedToday] = await Promise.all([loadInventory(), studiedMinutesToday()])
   const today = dayKey(new Date())
@@ -283,14 +285,23 @@ async function payForSession(durationMs: number) {
     entryFee: arena.entryFee,
     normalPayout: payout.coins,
   })
-  if (payout.coins === 0 && payout.honor === 0 && rescue === 0) return payout
+  if (payout.coins === 0 && payout.honor === 0 && rescue === 0) return { goldenBonus: 0 }
 
-  await applyLedger({
+  const after = await applyLedger({
     coins: payout.coins + rescue,
     honor: payout.honor,
     firstBonusDay: today,
   })
-  return payout
+
+  // 황금 시간: 이번 세션이 분으로 번 몫을 한 번 더. 첫 세션 보너스·구제금은 두 번 주지 않는다.
+  if (!golden) return { goldenBonus: 0 }
+  const bonus = goldenHourBonus({
+    sessionCoins: payout.coins,
+    firstSessionBonus: payout.breakdown.firstSessionBonus,
+    walletRoom: arenaById(after.arenaId).walletCap - after.coins,
+  })
+  await creditCoins(bonus.coins + bonus.honor)
+  return { goldenBonus: bonus.coins + bonus.honor }
 }
 
 /** 한 판이 끝났을 때 위로 올려 보내는 것. 정산과 판정은 App 이 한다. */
@@ -301,7 +312,12 @@ export type MatchSummary = {
   theirFp: number
   /** 항복으로 끝났는지. 항복은 FP 와 무관하게 패배로 친다. */
   resigned: boolean
+  /** 황금 시간이 세션 보상에 더 얹어 준 코인. */
+  goldenBonus?: number
 }
+
+// 기본값을 렌더마다 새 배열로 만들면 판이 바뀐 줄 알고 황금 시간을 다시 센다.
+const NO_COUPONS: readonly CouponId[] = []
 
 // ---------- 메인 컴포넌트 ----------
 export function StudyTimer({
@@ -311,6 +327,7 @@ export function StudyTimer({
   matchStarting = false,
   opponent,
   arena,
+  coupons = NO_COUPONS,
   profile,
 }: {
   /** 판이 끝났다. 배틀이었다면 판정에 필요한 값이 실려 온다. */
@@ -324,11 +341,21 @@ export function StudyTimer({
   opponent?: CpuOpponent | null
   /** 이번 판의 티어. 판 길이와 판돈이 여기서 온다. */
   arena?: Arena | null
+  /** 이번 판에 들고 들어온 쿠폰. 입장할 때 이미 한 장씩 빠졌다. */
+  coupons?: readonly CouponId[]
   /** Logged-in profile; drives the header avatar, outer line, title and name. */
   profile?: Profile
 }) {
   const [mode, setMode] = useState<'FOCUS' | 'SHORT BREAK'>('FOCUS')
-  const [breakBank, setBreakBank] = useState(0)
+  // 이번 판에서 공부로 번 휴식. 판이 끝나면 사라진다.
+  const [earnedBreak, setEarnedBreak] = useState(0)
+  // ROLL 로 받아 모아 둔 휴식. 저장소에 있어서 판을 넘어 남는다.
+  const [rolledBreak, setRolledBreak] = useState(0)
+  useEffect(() => {
+    loadInventory().then((inv) => setRolledBreak(inv.bankedBreak))
+  }, [])
+  // 저금통에 보이는 건 둘의 합이다.
+  const breakBank = earnedBreak + rolledBreak
   const [streakBroken, setStreakBroken] = useState(false)
   const [weeklyMax, setWeeklyMax] = useState(0)
   const [breakElapsed, setBreakElapsed] = useState(0)
@@ -394,7 +421,7 @@ export function StudyTimer({
     if (onBreak) return
     const hours = Math.floor(focusElapsed / BREAK_EARN_SECONDS)
     if (hours > earnedHours.current) {
-      setBreakBank((value) => value + 5 * (hours - earnedHours.current))
+      setEarnedBreak((value) => value + 5 * (hours - earnedHours.current))
     }
     earnedHours.current = hours
   }, [focusElapsed, onBreak])
@@ -456,7 +483,10 @@ export function StudyTimer({
       const session = await finish()
       earnedHours.current = 0
       if (session !== null) {
-        await payForSession(session.durationMs)
+        // 황금 시간은 판에서 처음 끝낸 세션에만 걸린다.
+        const golden = coupons.includes('goldenHour') && !goldenUsed.current
+        const { goldenBonus } = await payForSession(session.durationMs, golden)
+        if (goldenBonus > 0) goldenUsed.current = true
         setPayoutKey((k) => k + 1)
         onFinished?.(
           inBattle
@@ -466,6 +496,7 @@ export function StudyTimer({
                 myFp,
                 theirFp,
                 resigned: false,
+                goldenBonus,
               }
             : undefined
         )
@@ -477,6 +508,7 @@ export function StudyTimer({
       setIsFinishing(false)
     }
   }, [
+    coupons,
     elapsedMs,
     endBreak,
     finish,
@@ -489,6 +521,12 @@ export function StudyTimer({
     opponentElapsed,
     theirFp,
   ])
+
+  // 황금 시간을 이미 썼는지. 새 판(=새 상대·새 쿠폰)이면 다시 센다.
+  const goldenUsed = useRef(false)
+  useEffect(() => {
+    goldenUsed.current = false
+  }, [coupons])
 
   // 대전은 카운트다운이 끝나는 순간 알아서 출발한다. 직접 누를 필요 없다.
   const autoStarted = useRef(false)
@@ -614,11 +652,18 @@ export function StudyTimer({
   const handleResign = () => setConfirmResign(true)
 
   const useBreak = (minutes: number) => {
-    if (breakBank < minutes) return
+    if (minutes <= 0 || breakBank < minutes) return
+    // 판에서 번 몫부터 쓴다 — 그건 판이 끝나면 어차피 사라진다. 모자라면 모아 둔 몫에서.
+    const fromEarned = Math.min(earnedBreak, minutes)
+    const fromRolled = minutes - fromEarned
+    setEarnedBreak((value) => value - fromEarned)
+    if (fromRolled > 0) {
+      setRolledBreak((value) => value - fromRolled)
+      void spendBankedBreak(fromRolled)
+    }
     // pause rather than reset: the focus time accumulated so far must survive
     // the break so it can still be finished and saved.
     if (state === 'running') toggle()
-    setBreakBank((value) => value - minutes)
     setBreakElapsed(0)
     setMode('SHORT BREAK')
   }
@@ -673,7 +718,16 @@ export function StudyTimer({
             {arena && (
               <Text style={[styles.rankLine, { color: arena.color }]}>
                 {arena.name} · {formatMatchLength(arena.matchSeconds)} match ·{' '}
-                {hasRival ? `${arena.entryFee} coins staked` : `solo, +${arena.soloReward} on finish`}
+                {hasRival
+                  ? coupons.includes('freeEntry')
+                    ? 'entry on a ticket'
+                    : `${arena.entryFee} coins staked`
+                  : `solo, +${arena.soloReward} on finish`}
+              </Text>
+            )}
+            {coupons.length > 0 && (
+              <Text style={styles.couponLine} numberOfLines={2}>
+                Carrying {coupons.map((id) => COUPONS.find((c) => c.id === id)?.name ?? id).join(' · ')}
               </Text>
             )}
           </View>
@@ -853,10 +907,14 @@ export function StudyTimer({
             <Text style={styles.bankValue}>{breakBank} min</Text>
           </View>
           <Text style={styles.bankDesc}>
-            1 hour of focus adds 5 minutes. Spend them whenever you need.
+            1 hour of focus adds 5 minutes. Rest you roll in the book waits here too.
           </Text>
+          {rolledBreak > 0 && (
+            <Text style={styles.bankDesc}>{rolledBreak} min from the book, kept between matches.</Text>
+          )}
           <View style={styles.bankButtons}>
-            {[5, 10, 15].map((minutes) => (
+            {/* ROLL 휴식은 8분·14분처럼 떨어지니, 남은 걸 한 번에 다 쓰는 버튼도 둔다. */}
+            {[5, 10, 15, ...(breakBank > 0 && ![5, 10, 15].includes(breakBank) ? [breakBank] : [])].map((minutes) => (
               <Button
                 key={minutes}
                 variant="outline"
@@ -936,6 +994,7 @@ const styles = StyleSheet.create({
   },
   statusText: { fontFamily: T.font, fontSize: 16, color: T.muted, marginTop: 3 },
   rankLine: { fontFamily: T.fontMedium, fontSize: 13, marginTop: 4 },
+  couponLine: { fontFamily: T.font, fontSize: 12, color: T.primaryDeep, marginTop: 2 },
   weeklyBox: { paddingHorizontal: 14, paddingVertical: 10, alignItems: 'flex-end' },
   weeklyLabel: {
     fontFamily: T.fontMedium,
