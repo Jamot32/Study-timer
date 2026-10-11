@@ -144,7 +144,7 @@ function verifySyncToken_(token) {
   let claims;
   try {
     claims = JSON.parse(
-      Utilities.newBlob(Utilities.base64DecodeWebSafe(parts[0])).getDataAsString(Utilities.Charset.UTF_8)
+      Utilities.newBlob(Utilities.base64DecodeWebSafe(parts[0])).getDataAsString('UTF-8')
     );
   } catch (error) {
     throw authError_('invalid-response', 'Invalid sync request.');

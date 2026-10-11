@@ -33,8 +33,9 @@ Login also issues a sync token that lasts 30 days, but every push/pull call re-c
 
 ## Current scope
 
-- Google login and sheet allowlist only.
+- Google login and sheet allowlist.
 - Guest use remains available.
-- Profiles and study sessions remain device-local.
-- Session-history cloud sync is deliberately not implemented by this module.
+- Study-session history syncs through the same Apps Script (`Sync.gs`, `Sessions` tab) via `lib/sync` (`SyncGateway` seam, pull-then-push, last-write-wins by `updatedAt`, tombstones for deletes). Guest sessions upload on first sign-in; a different account signing in on the same device drops the previous account's local rows instead of uploading them.
+- Profile, inventory and settings remain device-local; see `DOCs/sync-remaining-state.md` for what to sync next.
 - Web, iOS and Android. The web build POSTs as `text/plain` so the request stays a CORS simple request (Apps Script cannot answer a preflight).
+- The sheet is a closed-beta backend. Move to Supabase (`DOCs/prd-login-and-sync.md`) before real users; only `SyncGateway` and `AuthGateway` adapters change.
