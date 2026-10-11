@@ -1,11 +1,29 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { ScrollView, StyleSheet, Text, View } from 'react-native';
 import { Check, Coins } from 'lucide-react-native';
 import { Button, Card, RADIUS, T, Tap } from '@/components/nova';
-import { applyLedger, countOf, debugSet, useInventory } from '@/lib/inventory';
+import {
+  applyLedger,
+  bagUseBlocked,
+  countOf,
+  debugSet,
+  settleDailyCoupons,
+  spendBagCoupon,
+  useInventory,
+  type Inventory,
+} from '@/lib/inventory';
 import { ARENAS, arenaById, STARTING_ELO } from '@/lib/arena';
 import { DEFAULT_INVENTORY } from '@/lib/inventory';
-import { SHOP, SHOP_SECTIONS, shopById, type ShopEntry } from '@/lib/shop';
+import { priceOf, SHOP_SECTIONS, shopById, shopShelf, type ShopEntry } from '@/lib/shop';
+import {
+  daysBetween,
+  CAPSULE_DAILY_MINUTES,
+  CAPSULE_DAYS,
+  COMPOUND_MIN_MINUTES,
+  COMPOUND_NIGHTS,
+  COUPON_USE,
+} from '@/lib/couponEffects';
+import { dayKey } from '@/lib/sessions';
 
 type Pane = 'shop' | 'bag';
 
@@ -43,17 +61,20 @@ function PriceTag({ price }: { price: number }) {
 
 function ShopRow({
   entry,
+  price,
   owned,
   coins,
   onBuy,
 }: {
   entry: ShopEntry;
+  /** 지금 값. 암시장이 열린 날엔 정가와 다르다. */
+  price: number;
   owned: number;
   coins: number;
   onBuy: () => void;
 }) {
   const soldOut = entry.unique && owned > 0;
-  const tooPoor = coins < entry.price;
+  const tooPoor = coins < price;
 
   return (
     <Card level={1} boxStyle={styles.row}>
@@ -67,7 +88,7 @@ function ShopRow({
             <Text style={styles.ownedText}>Owned</Text>
           </View>
         ) : (
-          <PriceTag price={entry.price} />
+          <PriceTag price={price} />
         )}
       </View>
 
@@ -84,11 +105,79 @@ function ShopRow({
           variant={soldOut || tooPoor ? 'outline' : 'primary'}
           disabled={soldOut || tooPoor}
           onPress={onBuy}
-          accessibilityLabel={`Buy ${entry.name} for ${entry.price} coins`}
+          accessibilityLabel={`Buy ${entry.name} for ${price} coins`}
         >
           {soldOut ? 'Owned' : tooPoor ? 'Not enough' : 'Buy'}
         </Button>
       </View>
+    </Card>
+  );
+}
+
+/** 가방의 쿠폰 한 장이 어떻게 쓰이는지. 판 쿠폰·지킴이는 안내만, 가방 쿠폰은 USE 버튼. */
+function BagAction({
+  inv,
+  entry,
+  onUsed,
+}: {
+  inv: Inventory;
+  entry: ShopEntry;
+  /** 주사위면 나온 코인, 아니면 0. */
+  onUsed: (coins: number) => void;
+}) {
+  const coupon = entry.coupon;
+  if (!coupon) return null;
+  const use = COUPON_USE[coupon.id];
+  if (use === 'slot') return <Text style={styles.bagNote}>Equip it in a battle slot.</Text>;
+  if (use === 'passive') return <Text style={styles.bagNote}>Works on its own when a streak breaks.</Text>;
+  if (use !== 'use' && use !== 'instant') return null;
+  const blocked = bagUseBlocked(inv, coupon.id);
+  const dice = use === 'instant';
+  return (
+    <View style={styles.rowFoot}>
+      <Text style={styles.bagNote}>{blocked ?? (dice ? 'Roll it for coins.' : 'Ready to use.')}</Text>
+      <Button
+        size="sm"
+        variant={blocked ? 'outline' : 'primary'}
+        disabled={!!blocked}
+        onPress={() => void spendBagCoupon(coupon.id).then(({ coins }) => onUsed(coins))}
+        accessibilityLabel={`${dice ? 'Roll' : 'Use'} ${entry.name}`}
+      >
+        {dice ? 'Roll' : 'Use'}
+      </Button>
+    </View>
+  );
+}
+
+/** 지금 돌고 있는 쿠폰들. 며칠에 걸친 효과는 여기서 진행을 읽는다. */
+function ActiveEffects({ inv, today }: { inv: Inventory; today: string }) {
+  const lines: { title: string; body: string }[] = [];
+  if (inv.capsule) {
+    const day = Math.min(CAPSULE_DAYS, daysBetween(inv.capsule.startDay, today) + 1);
+    lines.push({
+      title: 'Time Capsule — sealed',
+      body: `Day ${day} of ${CAPSULE_DAYS}. Study ${CAPSULE_DAILY_MINUTES} minutes every day to open it.`,
+    });
+  }
+  if (inv.compound) {
+    const left = COMPOUND_NIGHTS - daysBetween(inv.compound.startDay, today);
+    lines.push({
+      title: 'Compound Scroll — working',
+      body: `${Math.max(1, left)} of ${COMPOUND_NIGHTS} nights left. Study ${COMPOUND_MIN_MINUTES} minutes today to grow at midnight.`,
+    });
+  }
+  if (inv.secretShopDay === today) {
+    lines.push({ title: 'Black market — open today', body: 'Hidden titles and skins, all at half price.' });
+  }
+  if (!lines.length) return null;
+  return (
+    <Card level={0} tone="accent" boxStyle={styles.active}>
+      {lines.map((line) => (
+        <View key={line.title}>
+          <Text style={styles.activeTitle}>{line.title}</Text>
+          <Text style={styles.activeBody}>{line.body}</Text>
+        </View>
+      ))}
     </Card>
   );
 }
@@ -163,6 +252,15 @@ function TestBench({ elo, arenaName, onChange }: { elo: number; arenaName: strin
 export default function Shop() {
   const [pane, setPane] = useState<Pane>('shop');
   const { inv, buy, refresh } = useInventory();
+  const today = dayKey(new Date());
+  const secretOpen = inv.secretShopDay === today;
+  // 가방에서 방금 굴린 주사위. 다른 걸 쓰거나 탭을 옮기면 지운다.
+  const [diceResult, setDiceResult] = useState<number | null>(null);
+
+  // 며칠에 걸친 쿠폰(타임캡슐·복리)은 지나간 날을 여기서도 한 번 정산한다.
+  useEffect(() => {
+    void settleDailyCoupons().then(refresh);
+  }, [refresh]);
 
   const bag = useMemo(
     () =>
@@ -181,7 +279,11 @@ export default function Shop() {
             {pane === 'shop' ? 'Shop' : 'Bag'}
           </Text>
           <Text style={styles.subtitle}>
-            {pane === 'shop' ? 'Spend what your focus earned.' : 'What you are carrying.'}
+            {pane === 'shop'
+              ? secretOpen
+                ? 'The black market is open. Today only.'
+                : 'Spend what your focus earned.'
+              : 'What you are carrying.'}
           </Text>
         </View>
         <View style={styles.wallet}>
@@ -190,7 +292,13 @@ export default function Shop() {
         </View>
       </View>
 
-      <PaneSwitch pane={pane} onChange={setPane} />
+      <PaneSwitch
+        pane={pane}
+        onChange={(next) => {
+          setDiceResult(null);
+          setPane(next);
+        }}
+      />
 
       <ScrollView contentContainerStyle={styles.list} showsVerticalScrollIndicator={false}>
         {/* ⚠️ 임시 */}
@@ -198,7 +306,7 @@ export default function Shop() {
 
         {pane === 'shop'
           ? SHOP_SECTIONS.map((section) => {
-              const entries = SHOP.filter((e) => e.kind === section.kind);
+              const entries = shopShelf(secretOpen).filter((e) => e.kind === section.kind);
               if (!entries.length) return null;
               return (
                 <View key={section.kind} style={styles.section}>
@@ -208,15 +316,16 @@ export default function Shop() {
                     <ShopRow
                       key={entry.id}
                       entry={entry}
+                      price={priceOf(entry, secretOpen)}
                       owned={countOf(inv, entry.id)}
                       coins={inv.coins}
-                      onBuy={() => buy(entry.id, entry.price, entry.unique)}
+                      onBuy={() => buy(entry.id, priceOf(entry, secretOpen), entry.unique)}
                     />
                   ))}
                 </View>
               );
             })
-          : bag.length === 0
+          : bag.length === 0 && !inv.capsule && !inv.compound
             ? (
               <Card level={0} tone="alt" boxStyle={styles.empty}>
                 <Text style={styles.emptyTitle}>Your bag is empty</Text>
@@ -225,7 +334,14 @@ export default function Shop() {
                 </Text>
               </Card>
             )
-            : bag.map(({ entry, count }) => (
+            : [
+                diceResult !== null ? (
+                  <Card key="dice" level={0} tone="accent" boxStyle={styles.active}>
+                    <Text style={styles.activeTitle}>The dice say +{diceResult} coins</Text>
+                  </Card>
+                ) : null,
+                <ActiveEffects key="active" inv={inv} today={today} />,
+                ...bag.map(({ entry, count }) => (
                 <Card key={entry.id} level={1} boxStyle={styles.row}>
                   <View style={styles.rowHead}>
                     <Text style={styles.rowName} numberOfLines={1}>
@@ -236,8 +352,16 @@ export default function Shop() {
                     </View>
                   </View>
                   <Text style={styles.rowBlurb}>{entry.blurb}</Text>
+                  <BagAction
+                    inv={inv}
+                    entry={entry}
+                    onUsed={(coins) => {
+                      setDiceResult(coins > 0 ? coins : null);
+                      refresh();
+                    }}
+                  />
                 </Card>
-              ))}
+              ))]}
       </ScrollView>
     </View>
   );
@@ -305,6 +429,11 @@ const styles = StyleSheet.create({
   },
   benchHint: { fontFamily: T.font, fontSize: 13, lineHeight: 19, color: T.muted },
   benchRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+
+  bagNote: { flex: 1, fontFamily: T.font, fontSize: 13, color: T.accentDeep },
+  active: { padding: 16, gap: 10 },
+  activeTitle: { fontFamily: T.fontMedium, fontSize: 16, color: T.accentDeep },
+  activeBody: { fontFamily: T.font, fontSize: 14, lineHeight: 20, color: T.accentDeep, opacity: 0.85 },
 
   empty: { padding: 20 },
   emptyTitle: { fontFamily: T.fontMedium, fontSize: 17, color: T.ink },

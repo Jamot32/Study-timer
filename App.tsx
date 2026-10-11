@@ -27,9 +27,17 @@ import { loadProfile, normalizeProfile, type Profile } from './lib/auth';
 import { arenaById, eloAfter, type Arena } from './lib/arena';
 import { outcomeOf, settleMatch, type MatchOutcome } from './lib/match';
 import { SOLO_MIN_MINUTES } from './lib/economy';
-import { applyLedger, loadInventory } from './lib/inventory';
+import {
+  applyLedger,
+  loadInventory,
+  recordDuel,
+  settleDailyCoupons,
+  studyStreakNow,
+} from './lib/inventory';
+import { COUPONS, type CouponId } from './lib/coupons';
+import { duelCouponEffects } from './lib/couponEffects';
 import { studiedMinutesToday } from './lib/today';
-import MatchResult, { type MatchResultData } from './components/MatchResult';
+import MatchResult, { type CouponNote, type MatchResultData } from './components/MatchResult';
 import { type MatchSummary } from './components/StudyTimer';
 
 export default function App() {
@@ -60,11 +68,18 @@ export default function App() {
   const [result, setResult] = useState<MatchResultData | null>(null);
   // 이번 판이 솔로인지. 솔로는 정산도 ELO 변동도 없고, 끝내면 방 등급만큼 코인이 들어온다.
   const [solo, setSolo] = useState(false);
+  // 이번 판에 들고 들어간 쿠폰과 실제로 낸 참가비. 입장할 때 이미 지갑에서 빠졌다.
+  const [matchCoupons, setMatchCoupons] = useState<CouponId[]>([]);
+  const [entryPaid, setEntryPaid] = useState(0);
   const [profile, setProfile] = useState<Profile>(normalizeProfile({ name: 'Guest' }));
 
   useEffect(() => {
     loadProfile().then((saved) => {
       if (saved) setProfile(saved);
+    });
+    // 앱을 비운 사이 지나간 자정들 — 타임캡슐·복리·끊길 뻔한 연속 — 을 먼저 정산한다.
+    void settleDailyCoupons().then((events) => {
+      if (events.length) setRefreshKey((k) => k + 1);
     });
   }, []);
 
@@ -98,7 +113,11 @@ export default function App() {
     async (summary: MatchSummary) => {
       const room = arena;
       const wasSolo = solo;
+      const coupons = matchCoupons;
+      const paid = entryPaid;
       setSolo(false);
+      setMatchCoupons([]);
+      setEntryPaid(0);
       setCountdown(null);
       setMatchLocked(false);
       setBattleActive(false);
@@ -122,6 +141,16 @@ export default function App() {
 
       const inv = await loadInventory();
       const before = inv.elo;
+      const nameOf = (id: CouponId) => COUPONS.find((c) => c.id === id)?.name ?? id;
+      const golden = summary.goldenBonus ?? 0;
+      const goldenNote = (): CouponNote[] =>
+        coupons.includes('goldenHour')
+          ? [
+              golden > 0
+                ? { name: nameOf('goldenHour'), text: 'Your session paid double', coins: golden }
+                : { name: nameOf('goldenHour'), text: 'No paid session to double' },
+            ]
+          : [];
 
       if (wasSolo) {
         // 솔로는 잃을 것이 없다 — 참가비도 ELO 도 걸지 않았다.
@@ -139,8 +168,13 @@ export default function App() {
           myFp: summary.myFp,
           theirFp: 0,
           settlement: { ...settlement, myRefund: 0, winnerTake: earned, burn: 0, myNet: earned },
+          entryPaid: 0,
+          net: earned,
+          couponNotes: goldenNote(),
           eloBefore: before,
           eloAfter: before,
+          winStreak: null,
+          studyStreak: await studyStreakNow(),
           studiedTodayMinutes: await studiedMinutesToday(),
         });
         setArena(null);
@@ -148,9 +182,40 @@ export default function App() {
       }
 
       const after = eloAfter(before, room, outcome);
-      // 참가비는 입장할 때 이미 빠졌다. 여기서는 돌아오는 몫만 더한다.
-      const back = outcome === 'win' ? settlement.winnerTake : settlement.myRefund;
+      // 참가비는 입장할 때 이미 빠졌다. 여기서는 돌아오는 몫과 쿠폰이 얹는 몫만 더한다.
+      const perks = duelCouponEffects({
+        coupons,
+        outcome,
+        entryFee: room.entryFee,
+        myRefund: settlement.myRefund,
+        theirRefund: settlement.theirRefund,
+      });
+      const back =
+        (outcome === 'win' ? settlement.winnerTake : settlement.myRefund) +
+        perks.shieldRefund +
+        perks.plunder;
       await applyLedger({ coins: back, elo: after });
+      const streakBefore = inv.winStreak;
+      const { inv: afterDuel, anchored } = await recordDuel(outcome);
+
+      const notes: CouponNote[] = [];
+      if (coupons.includes('freeEntry'))
+        notes.push({ name: nameOf('freeEntry'), text: 'Your entry was on the house', coins: room.entryFee });
+      if (coupons.includes('timeShield'))
+        notes.push(
+          outcome === 'loss'
+            ? { name: nameOf('timeShield'), text: 'Your stake came back in full', coins: perks.shieldRefund, inNet: true }
+            : { name: nameOf('timeShield'), text: 'Not needed — you did not lose' }
+        );
+      if (coupons.includes('plunderSeal'))
+        notes.push(
+          outcome === 'win'
+            ? { name: nameOf('plunderSeal'), text: 'Took half again of what your rival lost', coins: perks.plunder, inNet: true }
+            : { name: nameOf('plunderSeal'), text: 'No win, nothing taken' }
+        );
+      notes.push(...goldenNote());
+      if (anchored)
+        notes.push({ name: nameOf('streakAnchor'), text: `Kept your ${streakBefore}-win run alive` });
 
       setResult({
         arena: room,
@@ -162,13 +227,18 @@ export default function App() {
         myFp: summary.myFp,
         theirFp: summary.theirFp,
         settlement,
+        entryPaid: paid,
+        net: back - paid,
+        couponNotes: notes,
         eloBefore: before,
         eloAfter: after,
+        winStreak: afterDuel.winStreak,
+        studyStreak: await studyStreakNow(),
         studiedTodayMinutes: await studiedMinutesToday(),
       });
       setArena(null);
     },
-    [arena, solo]
+    [arena, solo, matchCoupons, entryPaid]
   );
 
   useEffect(() => {
@@ -228,6 +298,7 @@ export default function App() {
                   matchStarting={countdown !== null}
                   opponent={opponent}
                   arena={arena}
+                  coupons={matchCoupons}
                   onFinished={(summary) => {
                     if (summary) {
                       void closeMatch(summary);
@@ -238,6 +309,8 @@ export default function App() {
                     setBattleActive(false);
                     setOpponent(null);
                     setArena(null);
+                    setMatchCoupons([]);
+                    setEntryPaid(0);
                     setRefreshKey((k) => k + 1);
                   }}
                   onResign={(summary) => void closeMatch(summary)}
@@ -245,10 +318,12 @@ export default function App() {
               </ScrollView>
             ) : (
               <BattleLobby
-                onMatchStart={(rival, matchRank, isSolo) => {
+                onMatchStart={(rival, matchRank, isSolo, coupons, paid) => {
                   setOpponent(rival);
                   setArena(matchRank);
                   setSolo(isSolo);
+                  setMatchCoupons(coupons);
+                  setEntryPaid(paid);
                   setBattleActive(true);
                   setCountdown(isSolo ? null : 3);
                 }}

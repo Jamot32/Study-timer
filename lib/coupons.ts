@@ -89,7 +89,7 @@ export const COUPONS: readonly Coupon[] = [
     name: 'Compound Scroll',
     quote: 'MANY GRAINS OF DUST MAKE A MOUNTAIN.',
     who: '',
-    effect: 'Every midnight your coins grow five percent. Only on days you studied thirty minutes.',
+    effect: 'For three nights your coins grow five percent at midnight. Only on days you studied thirty minutes.',
   },
   {
     id: 'secretShop',
@@ -100,11 +100,61 @@ export const COUPONS: readonly Coupon[] = [
   },
 ];
 
-/** 주사위 쿠폰이 즉시 주는 코인. 50~500 사이에서 10 단위로 떨어진다. */
-export const JACKPOT_MIN = 50;
-export const JACKPOT_MAX = 500;
+/**
+ * ROLL 에서 쿠폰이 나올 때 어떤 쿠폰일지의 무게. 클수록 자주 나온다.
+ * 복리 두루마리는 상점에서 팔지 않는 귀한 물건이라 아주 드물게만 나온다
+ * (쿠폰이 나온 판의 약 1%, ROLL 한 번 기준 약 0.5%).
+ */
+export const ROLL_WEIGHTS: Record<CouponId, number> = {
+  timeShield: 12,
+  goldenHour: 12,
+  plunderSeal: 12,
+  luckyGamble: 12,
+  streakAnchor: 12,
+  freeEntry: 12,
+  timeCapsule: 12,
+  secretShop: 12,
+  compoundBank: 1,
+};
+const ROLL_TOTAL = Object.values(ROLL_WEIGHTS).reduce((sum, w) => sum + w, 0);
+
+/** ROLL 에서 나올 쿠폰을 무게대로 고른다. 같은 씨앗이면 같은 쿠폰. */
+export function rollCoupon(seed: number): Coupon {
+  let roll = Math.abs(Math.floor(seed)) % ROLL_TOTAL;
+  for (const coupon of COUPONS) {
+    const weight = ROLL_WEIGHTS[coupon.id];
+    if (roll < weight) return coupon;
+    roll -= weight;
+  }
+  return COUPONS[0];
+}
+
+/**
+ * 주사위 쿠폰의 눈. 무게(100 중 몇)만큼 자주 나온다.
+ * 대개 작게 떨어지고 가끔 크게 터진다 — 기댓값은 77 로, 상점 값(90)보다 낮다.
+ * 사서 굴리면 평균적으로 조금 손해, 운이 좋으면 크게 남는 도박이다.
+ */
+export const JACKPOT_FACES: readonly { coins: number; weight: number }[] = [
+  { coins: 20, weight: 30 },
+  { coins: 40, weight: 25 },
+  { coins: 60, weight: 20 },
+  { coins: 100, weight: 13 },
+  { coins: 200, weight: 8 },
+  { coins: 500, weight: 4 },
+];
+const JACKPOT_TOTAL = JACKPOT_FACES.reduce((sum, face) => sum + face.weight, 0);
+
+/** 상점에서 주사위 한 장의 값. 기댓값보다 높아야 코인 기계가 되지 않는다. */
+export const JACKPOT_PRICE = 90;
+
+export const JACKPOT_EXPECTED =
+  JACKPOT_FACES.reduce((sum, face) => sum + face.coins * face.weight, 0) / JACKPOT_TOTAL;
 
 export function jackpotCoins(seed: number): number {
-  const steps = (JACKPOT_MAX - JACKPOT_MIN) / 10; // 45
-  return JACKPOT_MIN + (Math.abs(seed) % (steps + 1)) * 10;
+  let roll = Math.abs(Math.floor(seed)) % JACKPOT_TOTAL;
+  for (const face of JACKPOT_FACES) {
+    if (roll < face.weight) return face.coins;
+    roll -= face.weight;
+  }
+  return JACKPOT_FACES[0].coins;
 }
