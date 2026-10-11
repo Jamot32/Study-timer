@@ -249,9 +249,9 @@ function TestBench({ elo, arenaName, onChange }: { elo: number; arenaName: strin
   );
 }
 
-export default function Shop() {
+export default function Shop({ refreshKey = 0 }: { refreshKey?: number } = {}) {
   const [pane, setPane] = useState<Pane>('shop');
-  const { inv, buy, refresh } = useInventory();
+  const { inv, buy, refresh } = useInventory(refreshKey);
   const today = dayKey(new Date());
   const secretOpen = inv.secretShopDay === today;
   // 가방에서 방금 굴린 주사위. 다른 걸 쓰거나 탭을 옮기면 지운다.

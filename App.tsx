@@ -141,11 +141,15 @@ export default function App() {
     return () => subscription.remove();
   }, [authSession]);
 
-  // A sync that lands new data re-reads every screen keyed on refreshKey.
+  // A sync that lands new data re-reads every screen keyed on refreshKey. Pulled
+  // sessions can close out capsule/compound days, so settle those first.
   useEffect(
     () =>
       subscribeSyncStatus((status) => {
-        if (status.state === 'ok') setRefreshKey((k) => k + 1);
+        if (status.state !== 'ok') return;
+        void settleDailyCoupons()
+          .catch(() => [])
+          .then(() => setRefreshKey((k) => k + 1));
       }),
     []
   );
@@ -341,11 +345,15 @@ export default function App() {
         >
 
           <TabsContent value="roll" className="flex-1 w-full max-w-lg mx-auto">
-            <PageRoll onFocusChange={onRollFocus} />
+            <PageRoll onFocusChange={onRollFocus} refreshKey={refreshKey} />
           </TabsContent>
 
           <TabsContent value="stats" className="flex-1 w-full max-w-lg mx-auto">
-            <Dashboard isActive={activeTab === 'stats'} refreshKey={refreshKey} />
+            <Dashboard
+              isActive={activeTab === 'stats'}
+              refreshKey={refreshKey}
+              authSession={authSession}
+            />
           </TabsContent>
 
           <TabsContent value="battle" className="flex-1">
@@ -362,6 +370,7 @@ export default function App() {
               />
             ) : battlePane === 'profile' ? (
               <ProfileEdit
+                refreshKey={refreshKey}
                 profile={profile}
                 onProfileChanged={setProfile}
                 onBack={() => setBattlePane('lobby')}
@@ -399,6 +408,7 @@ export default function App() {
               </ScrollView>
             ) : (
               <BattleLobby
+                refreshKey={refreshKey}
                 onMatchStart={(rival, matchRank, isSolo, coupons, paid) => {
                   setOpponent(rival);
                   setArena(matchRank);
@@ -421,7 +431,7 @@ export default function App() {
           </TabsContent>
 
           <TabsContent value="shop" className="flex-1 w-full max-w-lg mx-auto">
-            <Shop />
+            <Shop refreshKey={refreshKey} />
           </TabsContent>
 
         </Tabs>
