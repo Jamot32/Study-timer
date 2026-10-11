@@ -186,6 +186,7 @@ export default function Settings({
             {syncText && sync.state === 'error' ? (
               <Tap
                 accessibilityRole="button"
+                hitSlop={8}
                 onPress={() => void syncSessions(authSession ?? null)}
               >
                 <Text style={[styles.syncLine, styles.syncError]}>{syncText}</Text>
