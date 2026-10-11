@@ -45,9 +45,16 @@ export interface ProfileEditProps {
   profile: Profile;
   onProfileChanged: (profile: Profile) => void;
   onBack?: () => void;
+  /** Bumped after a sync lands; re-reads the history the unlocks are judged on. */
+  refreshKey?: number;
 }
 
-export default function ProfileEdit({ profile, onProfileChanged, onBack }: ProfileEditProps) {
+export default function ProfileEdit({
+  profile,
+  onProfileChanged,
+  onBack,
+  refreshKey = 0,
+}: ProfileEditProps) {
   // There is no Save button and no Cancel — every change is written through, so
   // undo is the only way back. The stack lives here because this screen is the
   // only writer while it is mounted.
@@ -73,7 +80,7 @@ export default function ProfileEdit({ profile, onProfileChanged, onBack }: Profi
 
   useEffect(() => {
     loadSessions().then(setSessions);
-  }, []);
+  }, [refreshKey]);
 
   const present = history.present;
   const stats = useMemo(() => (sessions ? studyStats(sessions) : null), [sessions]);

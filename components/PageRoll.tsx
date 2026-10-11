@@ -450,9 +450,12 @@ function rewardLines(draw: Draw, rank: Arena): TextLine[] {
 }
 
 // onFocusChange: ROLL 로 책에 집중하는 동안 true. 바깥(탭 바)도 같이 치우라고 알린다.
-export default function PageRoll({ onFocusChange }: { onFocusChange?: (focused: boolean) => void } = {}) {
+export default function PageRoll({
+  onFocusChange,
+  refreshKey = 0,
+}: { onFocusChange?: (focused: boolean) => void; refreshKey?: number } = {}) {
   // 보상 크기의 기준. 지금 서 있는 방을 따른다 — 긴 판을 뛰는 사람이 크게 쉰다.
-  const { inv, refresh } = useInventory()
+  const { inv, refresh } = useInventory(refreshKey)
   const playerRank = arenaById(inv.arenaId)
   // 뽑기권은 하루에 한 장씩 쌓인다. 한 장도 없으면 ROLL 은 내일까지 닫힌다.
   const tickets = rollTicketsNow(inv)

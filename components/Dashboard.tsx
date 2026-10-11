@@ -12,10 +12,14 @@ import {
   type WeekStart,
 } from '@/lib/sessions';
 import { DEFAULT_SETTINGS, loadSettings, type Settings } from '@/lib/settings';
+import type { AuthSession } from '@/lib/auth';
+import { syncSessions } from '@/lib/sync';
 
 export interface DashboardProps {
   isActive?: boolean;
   refreshKey?: number;
+  /** Signed-in users also sync on pull-to-refresh. */
+  authSession?: AuthSession | null;
   /** Back to the timer. */
 }
 
@@ -47,7 +51,11 @@ function getBestDayOfWeek(
   return maxMs;
 }
 
-export default function Dashboard({ isActive = true, refreshKey = 0 }: DashboardProps) {
+export default function Dashboard({
+  isActive = true,
+  refreshKey = 0,
+  authSession = null,
+}: DashboardProps) {
   const [sessions, setSessions] = useState<StudySession[]>([]);
   const [settings, setSettings] = useState<Settings>(DEFAULT_SETTINGS);
   const [refreshing, setRefreshing] = useState(false);
@@ -76,8 +84,10 @@ export default function Dashboard({ isActive = true, refreshKey = 0 }: Dashboard
 
   const onRefresh = useCallback(() => {
     setRefreshing(true);
+    // a sync that lands data bumps refreshKey, which re-reads again
+    if (authSession) void syncSessions(authSession);
     fetchSessions();
-  }, [fetchSessions]);
+  }, [authSession, fetchSessions]);
 
   const { todayMs, weekMs, monthMs } = useMemo(
     () => totals(sessions, undefined, settings.weekStartsOn),

@@ -8,6 +8,7 @@ import type { Profile } from '@/lib/profile';
 import { Avatar } from '@/components/Avatar';
 import { clearSessions } from '@/lib/sessions';
 import { loadSettings, saveSettings, type Settings as SettingsValue } from '@/lib/settings';
+import { getSyncStatus, subscribeSyncStatus, syncSessions, type SyncStatus } from '@/lib/sync';
 
 const WEEK_START_CHOICES = [
   { label: 'Monday', value: 1 as const },
@@ -47,6 +48,31 @@ function Segmented<T_ extends string | number>({
   );
 }
 
+function syncedAgo(iso: string): string {
+  const minutes = Math.floor((Date.now() - Date.parse(iso)) / 60_000);
+  if (minutes < 1) return 'just now';
+  if (minutes < 60) return `${minutes} min ago`;
+  if (minutes < 60 * 24) return `${Math.floor(minutes / 60)} h ago`;
+  return `${Math.floor(minutes / (60 * 24))} d ago`;
+}
+
+/** One line of sync state for a signed-in user; null when there is nothing to say. */
+function syncLine(status: SyncStatus): string | null {
+  switch (status.state) {
+    case 'syncing':
+      return 'Syncing…';
+    case 'error':
+      return 'Sync failed — tap to retry';
+    case 'needs-sign-in':
+      return 'Sign in again to sync';
+    case 'ok':
+    case 'idle':
+      return status.lastSyncedAt ? `Synced ${syncedAgo(status.lastSyncedAt)}` : null;
+    default:
+      return null;
+  }
+}
+
 export interface SettingsProps {
   /** Called after a change that the dashboard's numbers depend on. */
   onChanged?: () => void;
@@ -71,10 +97,13 @@ export default function Settings({
   onSignOut,
 }: SettingsProps) {
   const [settings, setSettings] = useState<SettingsValue | null>(null);
+  const [sync, setSync] = useState<SyncStatus>(getSyncStatus);
 
   useEffect(() => {
     loadSettings().then(setSettings);
   }, []);
+
+  useEffect(() => subscribeSyncStatus(setSync), []);
 
   const update = useCallback(
     async (patch: Partial<SettingsValue>) => {
@@ -102,6 +131,8 @@ export default function Settings({
   }, [onSignOut]);
 
   if (!settings) return null;
+
+  const syncText = authSession ? syncLine(sync) : null;
 
   return (
     <ScrollView
@@ -150,9 +181,19 @@ export default function Settings({
             <Text style={styles.cardDesc}>
               {authSession
                 ? `Signed in with Google as ${authSession.user.email} (${authSession.user.role}).`
-                : `Using ${profile.name} as a local profile — no Google account connected.`}{' '}
-              Study history stays on this device.
+                : `Using ${profile.name} as a local profile — no Google account connected. Study history stays on this device.`}
             </Text>
+            {syncText && sync.state === 'error' ? (
+              <Tap
+                accessibilityRole="button"
+                hitSlop={8}
+                onPress={() => void syncSessions(authSession ?? null)}
+              >
+                <Text style={[styles.syncLine, styles.syncError]}>{syncText}</Text>
+              </Tap>
+            ) : syncText ? (
+              <Text style={styles.syncLine}>{syncText}</Text>
+            ) : null}
 
             <View style={styles.previewRow}>
               <Avatar profile={profile} size={56} />
@@ -179,7 +220,11 @@ export default function Settings({
           <Text style={styles.cardTitle} accessibilityRole="header">
             Study history
           </Text>
-          <Text style={styles.cardDesc}>Sessions are stored on this device only.</Text>
+          <Text style={styles.cardDesc}>
+            {authSession
+              ? "Sessions are backed up while you're signed in."
+              : 'Sessions are stored on this device only.'}
+          </Text>
           <Button block variant="outline" onPress={handleClear} style={styles.actionGap}>
             Clear all history
           </Button>
@@ -234,4 +279,6 @@ const styles = StyleSheet.create({
   previewName: { fontFamily: T.fontDisplay, fontSize: 21, color: T.ink, marginTop: 4 },
 
   actionGap: { marginTop: 12 },
+  syncLine: { fontFamily: T.font, fontSize: 14, color: T.muted, marginTop: 6 },
+  syncError: { color: T.danger },
 });

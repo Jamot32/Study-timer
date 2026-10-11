@@ -392,7 +392,8 @@ export function StudyTimer({
   // 오늘 기록에 쌓인 공부 시간. 매치와 무관하게 흘러간 것까지 전부.
   // 세션이 끝날 때마다 다시 읽는다.
   const [payoutKey, setPayoutKey] = useState(0)
-  const { minutes: studiedTodayMinutes } = useStudiedToday(payoutKey)
+  // 동기화로 다른 기기의 세션이 들어와도 다시 읽는다. 두 키 모두 늘기만 하니 합이 곧 둘 중 하나의 변화다.
+  const { minutes: studiedTodayMinutes } = useStudiedToday(payoutKey + refreshKey)
 
   useEffect(() => {
     let cancelled = false
