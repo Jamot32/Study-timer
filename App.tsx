@@ -8,7 +8,7 @@ import { Fraunces_600SemiBold } from '@expo-google-fonts/fraunces';
 import { PressStart2P_400Regular } from '@expo-google-fonts/press-start-2p';
 import { StatusBar } from 'expo-status-bar';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { ScrollView, StyleSheet, View } from 'react-native';
+import { AppState, ScrollView, StyleSheet, View } from 'react-native';
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 import Dashboard from './components/Dashboard';
 import BattleLobby from './components/BattleLobby';
@@ -24,6 +24,7 @@ import Login from './components/Login';
 import ProfileEdit from './components/ProfileEdit';
 import { clearProfile, loadProfile, saveProfile, type Profile } from './lib/profile';
 import { googleSheetAuth, type AuthSession } from './lib/auth';
+import { resetSyncState, subscribeSyncStatus, syncSessions } from './lib/sync';
 import { Tabs, TabsContent } from './components/ui/tabs';
 import { T } from './components/nova';
 import { type CpuOpponent } from './lib/cpuOpponent';
@@ -96,6 +97,8 @@ export default function App() {
       if (cancelled) return;
       setAuthSession(restoredSession);
       setProfile(next);
+      // fire and forget — the timer and first render never wait on the sheet
+      if (restoredSession) void syncSessions(restoredSession);
     })().catch(() => {
       if (!cancelled) setProfile(null);
     });
@@ -128,8 +131,27 @@ export default function App() {
     };
   }, []);
 
+  // Coming back to the app (native) or to the tab (web — react-native-web maps
+  // visibilitychange onto AppState) pulls whatever other devices saved meanwhile.
+  useEffect(() => {
+    if (!authSession) return;
+    const subscription = AppState.addEventListener('change', (next) => {
+      if (next === 'active') void syncSessions(authSession);
+    });
+    return () => subscription.remove();
+  }, [authSession]);
+
+  // A sync that lands new data re-reads every screen keyed on refreshKey.
+  useEffect(
+    () =>
+      subscribeSyncStatus((status) => {
+        if (status.state === 'ok') setRefreshKey((k) => k + 1);
+      }),
+    []
+  );
+
   const signOut = useCallback(async () => {
-    await googleSheetAuth.signOut();
+    await Promise.all([googleSheetAuth.signOut(), resetSyncState()]);
     await clearProfile();
     setAuthSession(null);
     setBattlePane('lobby');
@@ -297,6 +319,7 @@ export default function App() {
             onLoggedIn={(nextProfile, session) => {
               setAuthSession(session);
               setProfile(nextProfile);
+              if (session) void syncSessions(session);
             }}
           />
           <StatusBar style="dark" />
@@ -356,6 +379,8 @@ export default function App() {
                   arena={arena}
                   coupons={matchCoupons}
                   onFinished={(summary) => {
+                    // onFinished only fires once the session is saved
+                    if (authSession) void syncSessions(authSession);
                     if (summary) {
                       void closeMatch(summary);
                       return;
