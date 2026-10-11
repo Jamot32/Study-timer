@@ -54,7 +54,7 @@ function handleSync_(body, email) {
     console.error(JSON.stringify({ code: code, message: message }));
     return { ok: false, code: code, error: message };
   } finally {
-    lock.releaseLock();
+    if (lock.hasLock()) lock.releaseLock();
   }
 }
 
