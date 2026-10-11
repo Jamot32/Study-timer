@@ -222,7 +222,7 @@ export default function Settings({
           </Text>
           <Text style={styles.cardDesc}>
             {authSession
-              ? 'Sessions sync to your Google account.'
+              ? "Sessions are backed up while you're signed in."
               : 'Sessions are stored on this device only.'}
           </Text>
           <Button block variant="outline" onPress={handleClear} style={styles.actionGap}>
