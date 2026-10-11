@@ -14,6 +14,7 @@ function doPost(event) {
     const body = JSON.parse(event.postData && event.postData.contents ? event.postData.contents : '{}');
     if (body.action === 'push' || body.action === 'pull') {
       const email = verifySyncToken_(body.syncToken);
+      findActiveUser_({ email: email, sub: '' });
       return json_(handleSync_(body, email));
     }
     if (body.action !== 'login' || typeof body.idToken !== 'string' || !body.idToken) {
