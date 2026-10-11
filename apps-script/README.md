@@ -21,11 +21,11 @@ Create a standalone Apps Script project and copy in `Code.gs` and `appsscript.js
 
 - `SPREADSHEET_ID` (optional): the ID between `/d/` and `/edit` in the sheet URL. Defaults to the current beta sheet, [`13VRYsnBayobLLOEdLGvd8OoBUqSUIjGnHrDd0KxCn8I`](https://docs.google.com/spreadsheets/d/13VRYsnBayobLLOEdLGvd8OoBUqSUIjGnHrDd0KxCn8I/edit).
 - `GOOGLE_WEB_CLIENT_ID`: the Web OAuth client ID used by the Expo app.
-- `SYNC_SECRET`: a long random string (e.g. `openssl rand -base64 48`) used to HMAC-sign the 30-day sync tokens issued at login. Required: without it login and sync both fail with `not-configured`. Rotating it invalidates every issued sync token, which is how to revoke sync access before tokens expire; users get a new token on their next login.
+- `SYNC_SECRET`: a long random string (e.g. `openssl rand -base64 48`) used to HMAC-sign the 30-day sync tokens issued at login. Required: without it login and sync both fail with `not-configured`. Rotating it invalidates every issued sync token at once; users get a new token on their next login.
 
 The script calls Google's `tokeninfo` endpoint, then validates the token audience, issuer, expiration, and verified-email flag before reading the allowlist.
 
-A successful login also returns `session.syncToken`. `push`/`pull` requests carry it instead of a Google ID token; the script checks its signature and expiry, not the `Users` sheet, so disabling a row stops sync only at that user's next login or token expiry. Rotate `SYNC_SECRET` to cut access immediately.
+A successful login also returns `session.syncToken`. `push`/`pull` requests carry it instead of a Google ID token; the script checks its signature and expiry, then re-checks the `Users` sheet on every call, so disabling or removing a row stops sync immediately. Rotate `SYNC_SECRET` to revoke all tokens.
 
 ## 3. Deploy
 
