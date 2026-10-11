@@ -7,8 +7,9 @@ const AUTH_SESSION_KEY = 'study-timer.auth-session.v1';
 
 // expo-secure-store has no web implementation — every call throws there, which
 // used to reject restoreSession and leave the web build on the loading screen.
-// The session holds no secrets (only the approved user and an expiry), so web
-// falls back to the same AsyncStorage/localStorage the rest of the app uses.
+// Web falls back to the same AsyncStorage/localStorage the rest of the app uses.
+// The session's syncToken is a bearer token there, as readable as any other
+// first-party web credential; revoke all of them by rotating SYNC_SECRET.
 const store =
   Platform.OS === 'web'
     ? {
@@ -36,7 +37,8 @@ function isAuthSession(value: unknown): value is AuthSession {
       typeof user.displayName === 'string' &&
       typeof user.role === 'string' &&
       typeof session.expiresAt === 'string' &&
-      Number.isFinite(Date.parse(session.expiresAt))
+      Number.isFinite(Date.parse(session.expiresAt)) &&
+      (session.syncToken === undefined || typeof session.syncToken === 'string')
   );
 }
 

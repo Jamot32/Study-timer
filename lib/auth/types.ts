@@ -9,6 +9,8 @@ export type AuthUser = {
 export type AuthSession = {
   user: AuthUser;
   expiresAt: string;
+  /** Server-signed bearer token for session sync. Missing on sessions stored before sync existed. */
+  syncToken?: string;
 };
 
 export interface AuthGateway {

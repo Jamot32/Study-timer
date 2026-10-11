@@ -3,6 +3,7 @@ const REQUIRED_COLUMNS = ['email', 'status', 'display_name', 'role', 'avatar'];
 // Temporary DB for the closed beta. Script property SPREADSHEET_ID overrides it.
 const DEFAULT_SPREADSHEET_ID = '13VRYsnBayobLLOEdLGvd8OoBUqSUIjGnHrDd0KxCn8I';
 const ALLOWED_ISSUERS = ['accounts.google.com', 'https://accounts.google.com'];
+const SYNC_TOKEN_TTL_MS = 30 * 24 * 60 * 60 * 1000;
 
 function doGet() {
   return json_({ ok: true, name: 'study-timer-auth' });
@@ -11,6 +12,11 @@ function doGet() {
 function doPost(event) {
   try {
     const body = JSON.parse(event.postData && event.postData.contents ? event.postData.contents : '{}');
+    if (body.action === 'push' || body.action === 'pull') {
+      const email = verifySyncToken_(body.syncToken);
+      findActiveUser_({ email: email, sub: '' });
+      return json_(handleSync_(body, email));
+    }
     if (body.action !== 'login' || typeof body.idToken !== 'string' || !body.idToken) {
       return json_({ ok: false, code: 'invalid-response', error: 'Invalid login request.' });
     }
@@ -22,6 +28,7 @@ function doPost(event) {
       session: {
         user: user,
         expiresAt: new Date(Number(identity.exp) * 1000).toISOString(),
+        syncToken: issueSyncToken_(user.email),
       },
     });
   } catch (error) {
@@ -102,6 +109,57 @@ function findActiveUser_(identity) {
   }
 
   throw authError_('not-approved', 'This Google account does not have access yet.');
+}
+
+// Sync token = base64url(JSON {email, exp}) + '.' + base64url(HMAC-SHA256).
+// It outlives the one-hour Google ID token so sync keeps working between logins.
+function syncSecret_() {
+  const secret = PropertiesService.getScriptProperties().getProperty('SYNC_SECRET');
+  if (!secret) throw authError_('not-configured', 'Server sync configuration is missing.');
+  return secret;
+}
+
+function signSyncPayload_(payload, secret) {
+  return Utilities.base64EncodeWebSafe(Utilities.computeHmacSha256Signature(payload, secret));
+}
+
+function issueSyncToken_(email) {
+  const payload = Utilities.base64EncodeWebSafe(
+    JSON.stringify({ email: email, exp: Date.now() + SYNC_TOKEN_TTL_MS }),
+    Utilities.Charset.UTF_8
+  );
+  return payload + '.' + signSyncPayload_(payload, syncSecret_());
+}
+
+function verifySyncToken_(token) {
+  const secret = syncSecret_();
+  const parts = typeof token === 'string' ? token.split('.') : [];
+  if (parts.length !== 2 || !parts[0] || !parts[1]) {
+    throw authError_('invalid-response', 'Invalid sync request.');
+  }
+  if (!constantTimeEquals_(signSyncPayload_(parts[0], secret), parts[1])) {
+    throw authError_('not-approved', 'The sync token is invalid. Sign in again.');
+  }
+
+  let claims;
+  try {
+    claims = JSON.parse(
+      Utilities.newBlob(Utilities.base64DecodeWebSafe(parts[0])).getDataAsString(Utilities.Charset.UTF_8)
+    );
+  } catch (error) {
+    throw authError_('invalid-response', 'Invalid sync request.');
+  }
+  if (!claims || typeof claims.email !== 'string' || !claims.email || !(Number(claims.exp) > Date.now())) {
+    throw authError_('not-approved', 'The sync token has expired. Sign in again.');
+  }
+  return normalize_(claims.email);
+}
+
+function constantTimeEquals_(a, b) {
+  if (a.length !== b.length) return false;
+  let diff = 0;
+  for (let i = 0; i < a.length; i += 1) diff |= a.charCodeAt(i) ^ b.charCodeAt(i);
+  return diff === 0;
 }
 
 function normalize_(value) {
