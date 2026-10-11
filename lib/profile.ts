@@ -18,14 +18,24 @@ export type Profile = {
 
 export const AVATARS = ['🐱', '🦊', '🐸', '🐧', '🦉', '👾', '🌙', '⭐'];
 
+/** Shared with the inputs (maxLength) and the validator, so they cannot drift. */
+export const NAME_MAX = 20;
+export const TITLE_MAX = 20;
+
 // hex literals, not the T tokens — pixel.tsx imports react-native, which the
 // node self-check cannot load.
+// Free from the start; the reward frames below are gated by lib/progress.ts.
 export const FRAMES = [
   { label: 'INK', value: '#2e2218' },
   { label: 'FLAME', value: '#d95b2e' },
   { label: 'MOSS', value: '#4b7f52' },
   { label: 'SEA', value: '#2f6f9f' },
   { label: 'PLUM', value: '#7a4f9e' },
+  // earned — see FRAME_UNLOCKS
+  { label: 'GOLD', value: '#c9a227' },
+  { label: 'ROSE', value: '#c2577a' },
+  { label: 'ICE', value: '#7fb6c9' },
+  { label: 'VOID', value: '#3b3355' },
 ];
 
 /**
@@ -37,7 +47,25 @@ export type Sticker = { glyph: string; x: number; y: number };
 /** A drag surface with dozens of stickers is a bug, not a feature. */
 export const MAX_STICKERS = 8;
 
-export const STICKERS = ['⚡', '🔥', '❄️', '🍀', '💤', '🎧', '📚', '☕', '👑', '🎯'];
+export const STICKERS = [
+  '⚡',
+  '🔥',
+  '❄️',
+  '🍀',
+  '💤',
+  '🎧',
+  '📚',
+  '☕',
+  '👑',
+  '🎯',
+  // earned — see STICKER_UNLOCKS
+  '💎',
+  '🚀',
+  '🧠',
+  '🏆',
+  '🐉',
+  '🌌',
+];
 
 export const isImageAvatar = (avatar?: string) => !!avatar && /^(https?:|file:|data:)/.test(avatar);
 
@@ -79,16 +107,45 @@ const stickerList = (value: unknown): Sticker[] => {
 /**
  * Drops blank/unknown fields so an edit round-trips unchanged. Pure — the
  * Settings screen uses it to build the next profile before the write lands.
+ * Lengths are clamped here as well as in the inputs: a profile restored from an
+ * older build (or a hand-edited store) must still load into the current UI.
  */
 export function normalizeProfile(input: Profile): Profile {
   const stickers = stickerList(input.stickers);
+  const title = str(input.title);
   return {
-    name: input.name.trim(),
+    name: input.name.trim().slice(0, NAME_MAX),
     ...(str(input.avatar) ? { avatar: input.avatar } : {}),
-    ...(str(input.title) ? { title: str(input.title) } : {}),
+    ...(title ? { title: title.slice(0, TITLE_MAX) } : {}),
     ...(str(input.frame) ? { frame: input.frame } : {}),
     ...(stickers.length ? { stickers } : {}),
   };
+}
+
+/**
+ * Why a name cannot be used, or null when it can. Blank is the dangerous case:
+ * loadProfile reads a blank name as "signed out", so committing one would erase
+ * the profile (and with it the look) on the next launch.
+ */
+export function nameError(name: string): string | null {
+  const trimmed = name.trim();
+  if (!trimmed) return 'NAME CANNOT BE BLANK';
+  if (trimmed.length > NAME_MAX) return `MAX ${NAME_MAX} CHARACTERS`;
+  return null;
+}
+
+/**
+ * Lifts one sticker to the end of the list. Array order is draw order, so the
+ * sticker last touched ends up on top instead of hidden behind an older one.
+ * Out-of-range indices return the profile untouched.
+ */
+export function bringStickerToFront(profile: Profile, index: number): Profile {
+  const stickers = profile.stickers ?? [];
+  if (index < 0 || index >= stickers.length - 1) return profile;
+  const next = [...stickers];
+  const [lifted] = next.splice(index, 1);
+  next.push(lifted);
+  return { ...profile, stickers: next };
 }
 
 export async function loadProfile(): Promise<Profile | null> {
@@ -107,6 +164,9 @@ export async function loadProfile(): Promise<Profile | null> {
 
 export async function saveProfile(input: Profile): Promise<Profile> {
   const profile = normalizeProfile(input);
+  // Refuse the write rather than let a blank name read back as signed out. The
+  // editor validates first; this is the backstop for any other caller.
+  if (!profile.name) return profile;
   try {
     await storage.setItem(PROFILE_STORAGE_KEY, JSON.stringify(profile));
   } catch (error) {

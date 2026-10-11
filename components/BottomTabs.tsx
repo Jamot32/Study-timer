@@ -1,17 +1,17 @@
 import React from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
-import { BarChart3, BookOpen, Settings as SettingsIcon, Swords, Trophy, type LucideIcon } from 'lucide-react-native';
-import { Card, RADIUS, T } from './nova';
+import { StyleSheet, Text, View } from 'react-native';
+import { BarChart3, BookOpen, Store, Swords, Trophy, type LucideIcon } from 'lucide-react-native';
+import { Card, RADIUS, T, Tap } from './nova';
 
 /** 모든 화면이 함께 쓰는 하단 탭. */
-export type AppTab = 'roll' | 'stats' | 'battle' | 'rank' | 'settings';
+export type AppTab = 'roll' | 'stats' | 'battle' | 'rank' | 'shop';
 
 export const APP_TABS: { key: AppTab; label: string; Icon: LucideIcon }[] = [
   { key: 'roll', label: 'Roll', Icon: BookOpen },
   { key: 'stats', label: 'Stats', Icon: BarChart3 },
   { key: 'battle', label: 'Battle', Icon: Swords },
   { key: 'rank', label: 'Rank', Icon: Trophy },
-  { key: 'settings', label: 'Settings', Icon: SettingsIcon },
+  { key: 'shop', label: 'Shop', Icon: Store },
 ];
 
 export default function BottomTabs({
@@ -29,15 +29,12 @@ export default function BottomTabs({
       {APP_TABS.map(({ key, label, Icon }) => {
         const selected = key === activeTab;
         return (
-          <Pressable
+          <Tap
             key={key}
             onPress={() => onSelect(key)}
             disabled={locked}
-            style={({ pressed }) => [
-              styles.slot,
-              locked && !selected && styles.slotLocked,
-              pressed && styles.slotPressed,
-            ]}
+            style={[styles.slot, locked && !selected ? styles.slotLocked : null]}
+            pressedStyle={styles.slotPressed}
             accessibilityRole="tab"
             accessibilityLabel={label}
             accessibilityState={{ selected, disabled: locked }}
@@ -53,7 +50,7 @@ export default function BottomTabs({
             <Text numberOfLines={1} style={[styles.label, selected && styles.labelActive]}>
               {label}
             </Text>
-          </Pressable>
+          </Tap>
         );
       })}
     </Card>
@@ -64,7 +61,7 @@ const styles = StyleSheet.create({
   // 폭은 부모(App 의 tabBar)가 잡고, 여기서는 마진만 준다.
   frame: { alignSelf: 'stretch', marginHorizontal: 16, marginBottom: 10 },
   bar: {
-    height: 74,
+    height: 80,
     flexDirection: 'row',
     alignItems: 'center',
     // ROLL 은 왼쪽 끝, SETTINGS 는 오른쪽 끝에 붙이고 남는 폭을 사이에 고르게 나눈다.
@@ -74,12 +71,12 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
   },
   // 칸은 내용에 맞춘 고정 폭. 라벨 길이가 폭에 영향을 주지 않는다.
-  slot: { width: 58, alignItems: 'center', justifyContent: 'center', gap: 5 },
+  slot: { width: 64, alignItems: 'center', justifyContent: 'center', gap: 5 },
   slotPressed: { opacity: 0.55 },
   slotLocked: { opacity: 0.3 },
   pill: {
-    width: 46,
-    height: 30,
+    width: 50,
+    height: 32,
     borderRadius: RADIUS.full,
     alignItems: 'center',
     justifyContent: 'center',
@@ -90,7 +87,7 @@ const styles = StyleSheet.create({
     // 글꼴 두께는 고르든 말든 그대로 둔다. Bold 로 바꾸면 글자 폭이 늘어
     // 라벨 가장자리가 밀리고 탭 사이 간격이 들쭉날쭉해 보인다. 색만 바꾼다.
     fontFamily: T.fontMedium,
-    fontSize: 11,
+    fontSize: 13,
     letterSpacing: 0.1,
     color: T.muted,
     includeFontPadding: false,

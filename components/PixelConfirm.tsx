@@ -63,8 +63,8 @@ const styles = StyleSheet.create({
   },
   cardFrame: { width: '100%', maxWidth: 360 },
   card: { padding: 24 },
-  title: { fontFamily: T.fontDisplay, fontSize: 20, color: T.ink },
-  message: { fontFamily: T.font, fontSize: 14, color: T.muted, lineHeight: 21, marginTop: 8 },
+  title: { fontFamily: T.fontDisplay, fontSize: 22, color: T.ink },
+  message: { fontFamily: T.font, fontSize: 16, color: T.muted, lineHeight: 21, marginTop: 8 },
   buttons: { flexDirection: 'row', gap: 10, marginTop: 22 },
   buttonSlot: { flex: 1, alignSelf: 'stretch' },
 });

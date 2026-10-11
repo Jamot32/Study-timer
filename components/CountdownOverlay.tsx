@@ -22,10 +22,10 @@ const styles = StyleSheet.create({
   caption: {
     fontFamily: T.fontMedium,
     color: T.muted,
-    fontSize: 13,
+    fontSize: 15,
     letterSpacing: 1.6,
     textTransform: 'uppercase',
     marginBottom: 12,
   },
-  value: { fontFamily: T.fontDisplay, color: T.primary, fontSize: 96, letterSpacing: -2 },
+  value: { fontFamily: T.fontDisplay, color: T.primary, fontSize: 104, letterSpacing: -2 },
 });

@@ -3,7 +3,7 @@ import { StyleSheet, Text, TextInput, View } from 'react-native';
 import { Button, Card, RADIUS, T } from '@/components/nova';
 import GoogleSignInButton from '@/components/GoogleSignInButton';
 import { AuthError, googleSheetAuth, type AuthSession } from '@/lib/auth';
-import { saveProfile, type Profile } from '@/lib/profile';
+import { NAME_MAX, saveProfile, type Profile } from '@/lib/profile';
 
 type LoginProps = {
   onLoggedIn: (profile: Profile, session: AuthSession | null) => void;
@@ -71,7 +71,8 @@ export default function Login({ onLoggedIn }: LoginProps) {
             onBlur={() => setFocused(false)}
             placeholder="Your name"
             placeholderTextColor={T.muted}
-            maxLength={20}
+            autoFocus
+            maxLength={NAME_MAX}
             returnKeyType="go"
             accessibilityLabel="Your name"
             style={[styles.input, focused && styles.inputFocused]}
@@ -99,13 +100,13 @@ const styles = StyleSheet.create({
   screen: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 24, backgroundColor: T.bg },
   card: { width: '100%', maxWidth: 380 },
   cardBox: { padding: 26, gap: 14 },
-  title: { fontFamily: T.fontDisplay, fontSize: 30, color: T.ink, textAlign: 'center', letterSpacing: -0.4 },
-  subtitle: { fontFamily: T.font, fontSize: 14, color: T.muted, textAlign: 'center', marginBottom: 6 },
+  title: { fontFamily: T.fontDisplay, fontSize: 33, color: T.ink, textAlign: 'center', letterSpacing: -0.4 },
+  subtitle: { fontFamily: T.font, fontSize: 16, color: T.muted, textAlign: 'center', marginBottom: 6 },
   field: { gap: 7, marginBottom: 4 },
-  label: { fontFamily: T.fontMedium, fontSize: 11, letterSpacing: 1.1, textTransform: 'uppercase', color: T.muted },
+  label: { fontFamily: T.fontMedium, fontSize: 13, letterSpacing: 1.1, textTransform: 'uppercase', color: T.muted },
   input: {
     fontFamily: T.font,
-    fontSize: 16,
+    fontSize: 18,
     color: T.ink,
     borderWidth: 1,
     borderColor: T.border,
