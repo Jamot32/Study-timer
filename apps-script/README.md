@@ -74,7 +74,7 @@ Then create a development build with `npm run ios` or `npm run android`. Native 
 
 ## Operational limits
 
-This backend is intended for a small closed user group. Apps Script quotas, latency, and limited operational controls make it unsuitable as a durable public authentication backend. Study sessions remain device-local; the sheet is only an authorization registry.
+This backend is intended for a small closed user group. Apps Script quotas, latency, and limited operational controls make it unsuitable as a durable public authentication backend. The sheet is an authorization registry and, through `Sync.gs`, a temporary store for synced study sessions until the Supabase migration.
 
 ## Current deployment
 
