@@ -122,9 +122,11 @@ export default function Settings({
       async () => {
         await clearSessions();
         onChanged?.();
+        // push the tombstones now, not on the next foreground
+        if (authSession) void syncSessions(authSession);
       }
     );
-  }, [onChanged]);
+  }, [onChanged, authSession]);
 
   const handleSignOut = useCallback(async () => {
     await onSignOut?.();
