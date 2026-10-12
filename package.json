@@ -19,6 +19,7 @@
     "clsx": "^2.1.1",
     "expo": "~57.0.15",
     "expo-font": "~57.0.2",
+    "expo-haptics": "~57.0.3",
     "expo-linear-gradient": "~57.0.1",
     "expo-status-bar": "~57.0.1",
     "lucide-react-native": "^1.37.0",

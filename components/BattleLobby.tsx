@@ -12,17 +12,19 @@ import {
 import { LinearGradient } from 'expo-linear-gradient';
 import {
   ChevronRight,
+  Clock,
   Coins,
   Plus,
   Settings as SettingsIcon,
   Dumbbell,
   Swords,
+  Ticket,
   TrendingUp,
   Trophy,
   X,
 } from 'lucide-react-native';
 import Svg, { Circle, Ellipse, Path } from 'react-native-svg';
-import { Button, Card, RADIUS, T, Tap, elevation } from './nova';
+import { Button, Card, RADIUS, SEMANTIC, T, Tap, elevation } from './nova';
 import { type Profile } from '../lib/auth';
 import { createCpuOpponent, type CpuOpponent } from '../lib/cpuOpponent';
 import {
@@ -45,6 +47,9 @@ import {
   type Inventory,
 } from '../lib/inventory';
 import { COUPONS, type Coupon, type CouponId } from '../lib/coupons';
+import { shopById } from '../lib/shop';
+import { useStudiedToday } from '../lib/today';
+import { itemIcon } from './itemMeta';
 import { COUPON_USE } from '../lib/couponEffects';
 import { couponsAllowed } from '../lib/match';
 
@@ -101,10 +106,9 @@ function StatPill({
   icon: typeof Trophy;
   label: string;
   value: string;
-  tone: 'amber' | 'olive';
+  tone: keyof typeof SEMANTIC;
 }) {
-  const fg = tone === 'amber' ? T.primaryDeep : T.accentDeep;
-  const bg = tone === 'amber' ? T.primarySoft : T.accentSoft;
+  const { fg, bg } = SEMANTIC[tone];
   // 라벨 글자는 빼고 아이콘과 숫자만. 이름·칭호가 헤더에서 밀리지 않게.
   // 무엇을 세는 값인지는 읽어 주는 이름으로 남긴다.
   return (
@@ -138,7 +142,7 @@ function ProfileStrip({
         </Text>
       </View>
       <View style={styles.trophyMini}>
-        <Trophy size={14} color={T.primary} strokeWidth={2} />
+        <Trophy size={14} color={SEMANTIC.elo.fg} strokeWidth={2.2} />
         <Text style={styles.trophyText}>{profile.trophies.toLocaleString()}</Text>
       </View>
     </Card>
@@ -178,16 +182,6 @@ function ArenaArt({ rank, overlay }: { rank: Arena; overlay?: React.ReactNode })
       </LinearGradient>
     </Card>
 
-    {/* 고른 티어는 그림 아래에 적는다. 예전엔 그림 위에 얹혀 정원 문을 가렸다. */}
-    <View style={styles.arenaCaption}>
-      <View style={styles.arenaTierRow}>
-        <View style={[styles.arenaTierDot, { backgroundColor: rank.color }]} />
-        <Text style={[styles.arenaBadgeText, { color: rank.color }]}>{rank.name}</Text>
-        <Text style={styles.arenaBadgeMeta}>
-          {formatMatchLength(rank.matchSeconds)} · {rank.entryFee} coins
-        </Text>
-      </View>
-    </View>
     </View>
   );
 }
@@ -205,10 +199,20 @@ function CouponSlots({
   onPick: (slot: 0 | 1) => void;
 }) {
   return (
+    <View style={styles.slotsWrap}>
+      {/* 처음 보는 사람은 점선 두 칸이 뭔지 모른다. 이름을 붙여 둔다. */}
+      <View style={styles.slotsLabel}>
+        <Ticket size={11} color={T.inkSoft} strokeWidth={2.4} />
+        <Text style={styles.slotsLabelText}>Coupons</Text>
+      </View>
     <View style={styles.slots}>
       {([0, 1] as const).map((slot) => {
         const id = inv.equipped[slot] ?? null;
         const coupon = id ? COUPONS.find((c) => c.id === id) : undefined;
+        // 끼운 쿠폰은 이름 대신 아이콘으로. 작은 칸에 두 줄로 접힌 이름보다 한눈에 들어온다.
+        // 무엇이 끼워져 있는지는 읽어 주는 이름과, 눌러서 여는 고르기 창이 알려 준다.
+        const entry = id ? shopById(id) : undefined;
+        const Icon = entry ? itemIcon(entry) : null;
         return (
           <Tap
             key={slot}
@@ -218,16 +222,34 @@ function CouponSlots({
             }
             style={[styles.slot, coupon && styles.slotFilled]}
           >
-            {coupon ? (
-              <Text style={styles.slotName} numberOfLines={2}>
-                {coupon.name}
-              </Text>
+            {Icon ? (
+              <Icon size={26} color={SEMANTIC.selected.fg} strokeWidth={2} />
             ) : (
               <Plus size={18} color={T.muted} strokeWidth={2.2} />
             )}
           </Tap>
         );
       })}
+    </View>
+    </View>
+  );
+}
+
+/** '1h 12m' / '24m' / '0m'. */
+const formatStudied = (minutes: number) => {
+  const h = Math.floor(minutes / 60);
+  const m = minutes % 60;
+  return h > 0 ? `${h}h ${m}m` : `${m}m`;
+};
+
+/** 고르기 창의 쿠폰 아이콘 — 상점·가방과 같은 표를 본다. */
+function PickerIcon({ id }: { id: string }) {
+  const entry = shopById(id);
+  if (!entry) return null;
+  const Icon = itemIcon(entry);
+  return (
+    <View style={styles.pickerIcon}>
+      <Icon size={18} color={T.inkSoft} strokeWidth={2} />
     </View>
   );
 }
@@ -258,10 +280,11 @@ function CouponPicker({
           ) : (
             owned.map((c: Coupon) => (
               <Tap key={c.id} onPress={() => onChoose(c.id)} style={styles.pickerRow}>
+                <PickerIcon id={c.id} />
                 <View style={styles.pickerCopy}>
                   <Text style={styles.pickerName}>{c.name}</Text>
-                  <Text style={styles.pickerEffect} numberOfLines={2}>
-                    {c.effect}
+                  <Text style={styles.pickerEffect} numberOfLines={1}>
+                    {c.tagline}
                   </Text>
                 </View>
                 <Text style={styles.pickerCount}>x{countOf(inv, c.id)}</Text>
@@ -289,16 +312,16 @@ function ArenaStanding({ current, elo }: { current: Arena; elo: number }) {
 
   return (
     <View style={styles.standing}>
-      <View style={styles.rankHeader}>
-        <View style={styles.standingLeft}>
-          <View style={[styles.rankDot, { backgroundColor: current.color }]} />
-          <Text style={[styles.standingName, { color: current.color }]}>{current.name}</Text>
-          <Text style={styles.standingElo}>{elo} ELO</Text>
-        </View>
-        <Text style={styles.rankHeaderHint}>
-          {remaining === null || !next
-            ? 'Top arena'
-            : `${remaining} ELO to ${next.name}`}
+      {/* 아레나·ELO·다음 목표를 한 줄로. 화면에서 이 셋이 나오는 유일한 자리다. */}
+      <View style={styles.standingLeft}>
+        <View style={[styles.rankDot, { backgroundColor: current.color }]} />
+        <Text style={[styles.standingName, { color: current.color }]}>{current.name}</Text>
+        <Text style={styles.standingSep}>·</Text>
+        <Trophy size={13} color={SEMANTIC.elo.fg} strokeWidth={2.2} />
+        <Text style={styles.standingElo}>{elo.toLocaleString()} ELO</Text>
+        <Text style={styles.standingSep}>·</Text>
+        <Text style={styles.standingNext} numberOfLines={1}>
+          {remaining === null || !next ? 'Top arena' : `${remaining} to ${next.name}`}
         </Text>
       </View>
 
@@ -435,6 +458,8 @@ export default function BattleLobby({
   const { inv, refresh } = useInventory();
   const coins = inv.coins;
   const arena = arenaById(inv.arenaId);
+  // 오늘 기록에 쌓인 공부. 읽기만 한다.
+  const { minutes: studiedToday } = useStudiedToday();
   // 쿠폰 자리를 누르면 열리는 고르기 창.
   const [pickingSlot, setPickingSlot] = useState<0 | 1 | null>(null);
   // 랭크전에 필요한 건 참가비뿐이다. 자유 이용권을 끼웠으면 그것도 필요 없다.
@@ -566,18 +591,16 @@ export default function BattleLobby({
           <View style={styles.headerAvatar}>
             <Text style={styles.headerAvatarText}>{player.avatar}</Text>
           </View>
+          {/* 칭호는 프로필에서 본다. 헤더가 꽉 차서 잘리던 자리다. */}
           <View style={styles.headerCopy}>
-            <Text style={styles.levelLabel} numberOfLines={1}>
-              {player.title}
-            </Text>
             <Text style={styles.headerName} numberOfLines={1}>
               {player.name}
             </Text>
           </View>
         </Tap>
         <View style={styles.headerStats}>
-          <StatPill icon={Trophy} label="ELO" value={inv.elo.toLocaleString()} tone="amber" />
-          <StatPill icon={Coins} label="Coins" value={coins.toLocaleString()} tone="olive" />
+          {/* ELO 는 아레나 줄에서 한 번만 보여 준다. 헤더에는 코인만. */}
+          <StatPill icon={Coins} label="Coins" value={coins.toLocaleString()} tone="coin" />
           <Tap
             onPress={onOpenSettings}
             accessibilityLabel="Settings"
@@ -598,6 +621,14 @@ export default function BattleLobby({
           <ArenaStanding current={arena} elo={inv.elo} />
         )}
 
+        {/* 기록 쪽 숫자. 싸울지 말지 정할 때 참고가 되는 단 하나의 정보. */}
+        <View style={styles.todayLine}>
+          <Clock size={13} color={T.muted} strokeWidth={2.2} />
+          <Text style={styles.todayText}>
+            Studied today <Text style={styles.todayValue}>{formatStudied(studiedToday)}</Text>
+          </Text>
+        </View>
+
         <Button
           block
           size="lg"
@@ -614,8 +645,8 @@ export default function BattleLobby({
             <View style={styles.battleCopy}>
               <Text style={[styles.battleText, !canEnter && styles.battleTextOff]}>Battle</Text>
               <Text style={[styles.battleSubtext, !canEnter && styles.battleSubtextOff]}>
-                {arena.name} · {formatMatchLength(arena.matchSeconds)} match ·{' '}
-                {freeTicket ? 'free with ticket' : `${arena.entryFee} coins`}
+                {formatMatchLength(arena.matchSeconds)} ·{' '}
+                {freeTicket ? 'free with ticket' : `entry ${arena.entryFee} coins`}
               </Text>
             </View>
             <ChevronRight size={22} color={canEnter ? T.primaryFg : T.muted} strokeWidth={2.4} />
@@ -695,7 +726,7 @@ const styles = StyleSheet.create({
     width: 46,
     height: 46,
     borderRadius: 16,
-    backgroundColor: T.primarySoft,
+    backgroundColor: T.bgSunk,
     alignItems: 'center',
     justifyContent: 'center',
     marginRight: 10,
@@ -724,8 +755,9 @@ const styles = StyleSheet.create({
   },
   statValue: { fontFamily: T.fontBold, fontSize: 15 },
 
-  content: { flex: 1, paddingHorizontal: 16, justifyContent: 'space-between', paddingBottom: 10, gap: 16 },
-  arenaWrap: { flex: 1, minHeight: 250, maxHeight: 400, gap: 10 },
+  content: { flex: 1, paddingHorizontal: 16, paddingBottom: 10, gap: 12 },
+  // 남는 세로 공간은 일러스트가 채운다. 그만큼 버튼이 엄지가 닿는 아래쪽에 붙는다.
+  arenaWrap: { flex: 1, minHeight: 190 },
   arenaFrame: { flex: 1 },
   arenaBorder: { flex: 1, padding: 0 },
   arena: { flex: 1, justifyContent: 'flex-end' },
@@ -742,6 +774,24 @@ const styles = StyleSheet.create({
   },
 
   artOverlay: { position: 'absolute', top: 12, left: 12 },
+  slotsWrap: { gap: 5 },
+  slotsLabel: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    alignSelf: 'flex-start',
+    paddingHorizontal: 7,
+    paddingVertical: 2,
+    borderRadius: RADIUS.full,
+    backgroundColor: 'rgba(255,255,255,0.8)',
+  },
+  slotsLabelText: {
+    fontFamily: T.fontMedium,
+    fontSize: 10,
+    letterSpacing: 0.8,
+    textTransform: 'uppercase',
+    color: T.inkSoft,
+  },
   slots: { flexDirection: 'row', gap: 8 },
   slot: {
     // 정사각형. 그림 위에 얹히므로 바탕을 반투명 흰색으로 깔아 글자가 읽히게.
@@ -758,15 +808,8 @@ const styles = StyleSheet.create({
   },
   slotFilled: {
     borderStyle: 'solid',
-    borderColor: T.primary,
-    backgroundColor: 'rgba(247,233,203,0.94)',
-  },
-  slotName: {
-    fontFamily: T.fontMedium,
-    fontSize: 10,
-    lineHeight: 13,
-    color: T.primaryDeep,
-    textAlign: 'center',
+    borderColor: T.accent,
+    backgroundColor: 'rgba(229,235,217,0.95)',
   },
 
   pickerBackdrop: {
@@ -797,14 +840,27 @@ const styles = StyleSheet.create({
   },
   pickerCopy: { flex: 1 },
   pickerName: { fontFamily: T.fontMedium, fontSize: 15, color: T.ink },
-  pickerEffect: { fontFamily: T.font, fontSize: 12, lineHeight: 17, color: T.muted, marginTop: 2 },
+  pickerEffect: { fontFamily: T.font, fontSize: 13, color: T.muted, marginTop: 2 },
+  pickerIcon: {
+    width: 36,
+    height: 36,
+    borderRadius: 11,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: T.card,
+  },
   pickerCount: { fontFamily: T.fontMedium, fontSize: 14, color: T.accentDeep },
   pickerClear: { marginTop: 2 },
 
-  standing: { gap: 2 },
-  standingLeft: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  standing: { gap: 8 },
+  todayLine: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 4 },
+  todayText: { fontFamily: T.font, fontSize: 14, color: T.muted },
+  todayValue: { fontFamily: T.fontMedium, color: T.ink },
+  standingLeft: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   standingName: { fontFamily: T.fontMedium, fontSize: 16 },
-  standingElo: { fontFamily: T.font, fontSize: 13, color: T.muted },
+  standingElo: { fontFamily: T.fontMedium, fontSize: 14, color: SEMANTIC.elo.fg },
+  standingSep: { fontFamily: T.font, fontSize: 14, color: T.borderStrong },
+  standingNext: { flexShrink: 1, fontFamily: T.font, fontSize: 14, color: T.muted },
 
   eloTrack: {
     height: 6,
@@ -813,7 +869,7 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
     marginBottom: 10,
   },
-  eloFill: { height: '100%', borderRadius: 3, backgroundColor: T.primary },
+  eloFill: { height: '100%', borderRadius: 3, backgroundColor: SEMANTIC.elo.fg },
 
   promo: { padding: 16, gap: 8 },
   promoHead: { flexDirection: 'row', alignItems: 'center', gap: 8 },
@@ -943,7 +999,7 @@ const styles = StyleSheet.create({
   },
   profileName: { fontFamily: T.fontDisplay, color: T.ink, fontSize: 19, marginTop: 2 },
   trophyMini: { alignItems: 'center', gap: 3 },
-  trophyText: { fontFamily: T.fontMedium, color: T.primaryDeep, fontSize: 15 },
+  trophyText: { fontFamily: T.fontMedium, color: SEMANTIC.elo.fg, fontSize: 15 },
   vsBadge: {
     position: 'absolute',
     top: '44%',

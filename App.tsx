@@ -4,7 +4,12 @@ import {
   DMSans_500Medium,
   DMSans_700Bold,
 } from '@expo-google-fonts/dm-sans';
+<<<<<<< Updated upstream
 import { Fraunces_600SemiBold } from '@expo-google-fonts/fraunces';
+=======
+import { Fraunces_400Regular_Italic, Fraunces_600SemiBold } from '@expo-google-fonts/fraunces';
+import { PressStart2P_400Regular } from '@expo-google-fonts/press-start-2p';
+>>>>>>> Stashed changes
 import { StatusBar } from 'expo-status-bar';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { ScrollView, StyleSheet, View } from 'react-native';
@@ -45,6 +50,11 @@ export default function App() {
     DMSans_500Medium,
     DMSans_700Bold,
     Fraunces_600SemiBold,
+<<<<<<< Updated upstream
+=======
+    Fraunces_400Regular_Italic,
+    PressStart2P_400Regular,
+>>>>>>> Stashed changes
   });
   const [activeTab, setActiveTab] = useState<AppTab>('battle');
   const [battleActive, setBattleActive] = useState(false);
@@ -64,6 +74,8 @@ export default function App() {
   const [battlePane, setBattlePane] = useState<'lobby' | 'settings' | 'profile'>('lobby');
   // 판이 끝나면 정산 결과가 여기 담기고, 로비 대신 결과 화면이 뜬다.
   const [result, setResult] = useState<MatchResultData | null>(null);
+  // ROLL 결과에서 '가방에서 보기'를 누르면 올라간다. 상점 탭이 이걸 보고 가방을 연다.
+  const [bagSignal, setBagSignal] = useState(0);
   // 이번 판이 솔로인지. 솔로는 정산도 ELO 변동도 없고, 끝내면 방 등급만큼 코인이 들어온다.
   const [solo, setSolo] = useState(false);
   // 이번 판에 들고 들어간 쿠폰과 실제로 낸 참가비. 입장할 때 이미 지갑에서 빠졌다.
@@ -262,7 +274,13 @@ export default function App() {
         >
 
           <TabsContent value="roll" className="flex-1 w-full max-w-lg mx-auto">
-            <PageRoll onFocusChange={onRollFocus} />
+            <PageRoll
+              onFocusChange={onRollFocus}
+              onOpenBag={() => {
+                selectTab('shop');
+                setBagSignal((n) => n + 1);
+              }}
+            />
           </TabsContent>
 
           <TabsContent value="stats" className="flex-1 w-full max-w-lg mx-auto">
@@ -294,6 +312,7 @@ export default function App() {
                   profile={profile}
                   matchStarting={countdown !== null}
                   opponent={opponent}
+                  solo={solo}
                   arena={arena}
                   coupons={matchCoupons}
                   onFinished={(summary) => {
@@ -333,11 +352,11 @@ export default function App() {
           </TabsContent>
 
           <TabsContent value="rank" className="flex-1 w-full max-w-lg mx-auto">
-            <RankBoard />
+            <RankBoard profile={profile} />
           </TabsContent>
 
           <TabsContent value="shop" className="flex-1 w-full max-w-lg mx-auto">
-            <Shop />
+            <Shop bagSignal={bagSignal} />
           </TabsContent>
 
         </Tabs>

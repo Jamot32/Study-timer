@@ -5,7 +5,8 @@ import { Button, RADIUS, T } from '@/components/nova'
 import { QUOTES } from '@/components/quotes'
 import { arenaById, type Arena } from '@/lib/arena'
 import { jackpotCoins, rollCoupon, type Coupon } from '@/lib/coupons'
-import { claimRoll, rollTicketsNow, useInventory } from '@/lib/inventory'
+import { claimRoll, equipCoupon, rollTicketsNow, useInventory } from '@/lib/inventory'
+import RollResult from '@/components/RollResult'
 
 // ============================================================
 // PAGE ROLL — 무작위 페이지 뽑기
@@ -50,7 +51,8 @@ const STEPS = 9
 // 폰에서는 길쭉하게, 단 수도 그에 맞춰 늘어난다. 칸마다 책이 빈틈없이 꽂힌다.
 const BOARD = 14           // 선반·기둥 두께
 const CASE_IN = 2          // 테두리 선이 화면에 잘리지 않게 안으로 들이는 만큼
-const ROW_TARGET = 135     // 선반 사이 빈 높이로 삼고 싶은 값. 단 수는 이걸로 정한다.
+const ROW_TARGET = 175     // 선반 사이 빈 높이로 삼고 싶은 값. 단 수는 이걸로 정한다.
+const MAX_ROWS = 4         // 그래도 단이 너무 많아지지 않게. 4단을 넘으면 책장이 시끄러워진다.
 const BOOK_GAP = 4
 const PULL_DROP = 16       // 뽑힐 때 앞으로(화면 아래로) 나오는 거리
 const PULL_GROW = 0.18     // 뽑히며 가까워져 커지는 비율
@@ -59,7 +61,8 @@ const SHELF_LIFT = -10     // 마우스가 올라간 책이 위로 빠져나오�
 type VBox = { x: number; y: number; w: number; h: number }
 type Book = { row: number; x0: number; w: number; h: number; y: number; c: string }
 type Shelf = { L: number; R: number; T: number; B: number; boards: number[]; books: Book[] }
-const BOOK_COLORS = [T.card, T.accentSoft, T.primarySoft, T.cardAlt, T.accent, T.primary, T.bgSunk]
+// 종이 · 크림 · 옅은 잎 세 톤만. 고른 책(앰버)이 책장에서 혼자 튀어 보이게.
+const BOOK_COLORS = [T.card, T.cardAlt, T.accentSoft]
 
 // 꽂힌 책들. 높이와 색을 고정 씨앗으로 흩뿌려 단마다 왼쪽부터 채운다. 책등 너비는 3D 책의
 // 두께 비율(BLOCK/H)로 맞춘다. 그래야 뽑힌 책이 상자로 바뀌어도 책등 폭이 그대로다.
@@ -69,7 +72,7 @@ function buildShelf(vb: VBox): Shelf {
   const R = vb.x + vb.w - CASE_IN
   const T0 = vb.y + CASE_IN
   const B = vb.y + vb.h - CASE_IN
-  const rows = Math.max(1, Math.round((B - T0 - BOARD) / (ROW_TARGET + BOARD)))
+  const rows = Math.max(1, Math.min(MAX_ROWS, Math.round((B - T0 - BOARD) / (ROW_TARGET + BOARD))))
   const rowIn = (B - T0 - BOARD * (rows + 1)) / rows
   const shelfY = (row: number) => T0 + BOARD + (row + 1) * rowIn + row * BOARD   // 그 단 선반 윗면
   const hMin = Math.round(rowIn * 0.7)
@@ -396,12 +399,15 @@ function pickRewards(seed: number): { label: string; weight: number }[] {
 type TextLine = { text: string; size: number; color: string; align: 'start' | 'end'; glow?: boolean }
 
 // 왼쪽 쪽: 명언이 쪽을 다 차지하도록 크게, 맨 밑에 누가 한 말인지 작게.
+/** 쿠폰에는 짝이 되는 문장이 정해져 있다. 그냥 시간이면 책에서 아무 문장이나. */
+function quoteFor(seed: number, draw: Draw): [string, string] {
+  return draw.kind === 'coupon'
+    ? [draw.coupon.quote, draw.coupon.who]
+    : (QUOTES[mix(seed) % QUOTES.length] as [string, string])
+}
+
 function quoteLines(seed: number, draw: Draw): TextLine[] {
-  // 쿠폰에는 짝이 되는 문장이 정해져 있다. 그냥 시간이면 책에서 아무 문장이나.
-  const [q, who] =
-    draw.kind === 'coupon'
-      ? [draw.coupon.quote, draw.coupon.who]
-      : QUOTES[mix(seed) % QUOTES.length]
+  const [q, who] = quoteFor(seed, draw)
   const body: TextLine[] = wrap(q, QUOTE_CHARS).map((t) => ({ text: t, size: QUOTE_FONT, color: T.ink, align: 'start', glow: true }))
   // 말한 이가 길면 접는다. 줄 간격은 명언과 같아 자리는 그대로 이어진다.
   const by: TextLine[] = who
@@ -449,14 +455,40 @@ function rewardLines(draw: Draw, rank: Arena): TextLine[] {
   ]
 }
 
+/** 다음 자정까지 — '14h', '3h 20m', '45m'. 한 시간 아래로는 분만. */
+function untilMidnight(nowMs: number): string {
+  const now = new Date(nowMs)
+  const midnight = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1)
+  const mins = Math.max(1, Math.ceil((midnight.getTime() - nowMs) / 60000))
+  const h = Math.floor(mins / 60)
+  const m = mins % 60
+  if (h === 0) return `${m}m`
+  // 몇 시간 남았을 때는 분까지 세면 숫자만 시끄럽다. 세 시간 아래부터 분을 붙인다.
+  return h >= 3 || m === 0 ? `${h}h` : `${h}h ${m}m`
+}
+
 // onFocusChange: ROLL 로 책에 집중하는 동안 true. 바깥(탭 바)도 같이 치우라고 알린다.
-export default function PageRoll({ onFocusChange }: { onFocusChange?: (focused: boolean) => void } = {}) {
+export default function PageRoll({
+  onFocusChange,
+  onOpenBag,
+}: {
+  onFocusChange?: (focused: boolean) => void
+  /** 결과 화면에서 '가방에서 보기'를 누르면 상점 탭의 가방으로 간다. */
+  onOpenBag?: () => void
+} = {}) {
   // 보상 크기의 기준. 지금 서 있는 방을 따른다 — 긴 판을 뛰는 사람이 크게 쉰다.
   const { inv, refresh } = useInventory()
   const playerRank = arenaById(inv.arenaId)
   // 뽑기권은 하루에 한 장씩 쌓인다. 한 장도 없으면 ROLL 은 내일까지 닫힌다.
   const tickets = rollTicketsNow(inv)
   const spent = tickets <= 0
+  // 뽑기권은 자정(이 기기의 날짜가 바뀌는 때)에 한 장 붙는다. 다 쓴 동안은 남은 시간을 1분마다 다시 센다.
+  const [now, setNow] = useState(() => Date.now())
+  useEffect(() => {
+    if (!spent) return
+    const id = setInterval(() => setNow(Date.now()), 60_000)
+    return () => clearInterval(id)
+  }, [spent])
   const [scene, setScene] = useState<Scene>(SHUT)
   // idle: 제목과 ROLL 이 보이는 첫 화면. 책장은 보이지만 만질 수 없다.
   // shelf: ROLL 을 눌러 책장만 남은 상태. 여기서만 책을 고를 수 있다.
@@ -559,6 +591,14 @@ export default function PageRoll({ onFocusChange }: { onFocusChange?: (focused: 
     if (busy || mode !== 'idle' || spent) return
     setMode('shelf')
   }, [busy, mode, spent])
+
+  // 결과 화면의 'Roll again'. 책이 다 덮여 첫 화면에 돌아오면 그대로 한 번 더 뽑는다.
+  const rollAgain = useRef(false)
+  useEffect(() => {
+    if (!rollAgain.current || busy || mode !== 'idle') return
+    rollAgain.current = false
+    roll()
+  }, [busy, mode, roll])
 
   // 책을 덮고 책장에 도로 꽂은 뒤 첫 화면으로. 책장만 보던 중이면 바로 첫 화면.
   const reset = useCallback(() => {
@@ -926,17 +966,45 @@ export default function PageRoll({ onFocusChange }: { onFocusChange?: (focused: 
         <>
           <View style={styles.head}>
             <Text style={styles.title} accessibilityRole="header">Page roll</Text>
-            <Text style={styles.sub}>
-              Roll, then pick a book off the shelf. It opens somewhere — tap a leaf, then select.
-              A ticket a day, and they pile up. Coupons go straight to your bag.
-            </Text>
+            <Text style={styles.sub}>One ticket a day — pull a book and open it.</Text>
           </View>
 
         </>
       ) : null}
 
+      {/* 책이 다 눕고 나면 그 순간부터는 대칭인 결과 화면으로 바꿔 끼운다. */}
+      {settled && draw && pick ? (
+        <View style={styles.resultArea}>
+          <RollResult
+            draw={draw}
+            quote={quoteFor(pick.a, draw)[0]}
+            who={quoteFor(pick.a, draw)[1]}
+            ticketsLeft={tickets}
+            equippedIds={inv.equipped}
+            onEquip={async (id) => {
+              const slot = inv.equipped.findIndex((x) => !x)
+              if (slot < 0) return false
+              await equipCoupon(slot as 0 | 1, id)
+              refresh()
+              return true
+            }}
+            onOpenBag={() => {
+              reset()
+              onOpenBag?.()
+            }}
+            onRollAgain={() => {
+              rollAgain.current = true
+              reset()
+            }}
+            onClose={reset}
+          />
+        </View>
+      ) : null}
+
       {/* ROLL 뒤에는 화면 여백까지 밀어내고 무대가 가장자리에 붙는다. */}
-      <View style={[styles.stage, focused && styles.stageFull]} {...(stageMouse as object)}
+      <View
+        style={[styles.stage, focused && styles.stageFull, settled && draw && pick ? styles.stageHidden : null]}
+        {...(stageMouse as object)}
         onLayout={(e) => {
           const { width, height } = e.nativeEvent.layout
           setStageSize((s) => (s.w === width && s.h === height ? s : { w: width, h: height }))
@@ -949,7 +1017,7 @@ export default function PageRoll({ onFocusChange }: { onFocusChange?: (focused: 
       {/* 하단 액션. 책이 펴졌으면 SELECT/BACK, 첫 화면이면 ROLL.
           책장에서 책을 뽑는 동안(shelf·pull·shut)은 아무것도 두지 않는다 —
           버튼이 사라진 만큼 무대가 넓어져 책장이 화면을 다 쓴다. */}
-      {mode === 'open' || mode === 'flat' ? (
+      {settled && draw && pick ? null : mode === 'open' || mode === 'flat' ? (
         <Button
           size="lg"
           variant={flat ? 'outline' : 'primary'}
@@ -962,7 +1030,9 @@ export default function PageRoll({ onFocusChange }: { onFocusChange?: (focused: 
         </Button>
       ) : mode === 'idle' ? (
         <Button size="lg" onPress={roll} disabled={busy || spent} accessibilityLabel="Roll for a page" style={styles.action}>
-          {spent ? 'Next ticket tomorrow' : `Roll · ${tickets} ticket${tickets === 1 ? '' : 's'}`}
+          {spent
+            ? `Next ticket in ${untilMidnight(now)}`
+            : `Roll · ${tickets} ticket${tickets === 1 ? '' : 's'}`}
         </Button>
       ) : null}
     </View>
@@ -975,6 +1045,10 @@ const styles = StyleSheet.create({
   title: { fontFamily: T.fontDisplay, fontSize: 31, color: T.ink, letterSpacing: -0.4 },
   sub: { fontFamily: T.font, fontSize: 16, lineHeight: 21, color: T.muted, marginTop: 6 },
 
+
+  resultArea: { flex: 1 },
+  // 결과 화면이 떠 있는 동안 3D 무대는 자리만 비킨다(애니메이션 상태는 그대로 둔다).
+  stageHidden: { display: 'none' },
 
   // 하단 액션 버튼. 무대(flex:1)에 밀리지 않게 폭은 화면 전체, 크기는 고정.
   action: { alignSelf: 'stretch', width: '100%', flexShrink: 0 },

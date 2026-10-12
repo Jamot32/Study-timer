@@ -1,59 +1,59 @@
-import React, { useEffect, useState } from 'react';
+import React from 'react';
 import { ScrollView, StyleSheet, Text, View } from 'react-native';
 import { Trophy } from 'lucide-react-native';
-import { Card, RADIUS, T } from './nova';
-import { loadProfile, type Profile } from '../lib/auth';
+import { Card, RADIUS, SEMANTIC, T } from './nova';
+import { type Profile } from '../lib/auth';
+import { useInventory } from '../lib/inventory';
 
+// 순위는 ELO 로 매긴다 — 배틀 화면의 트로피 숫자와 같은 값, 같은 아이콘, 같은 색.
+// 상대들은 아직 서버가 없어 고정값이다.
 const RIVALS = [
-  { name: 'Nova Mint', trophies: 2480, avatar: '🦊' },
-  { name: 'Page Witch', trophies: 2301, avatar: '🐈' },
-  { name: 'Desk Goblin', trophies: 2044, avatar: '🐸' },
-  { name: 'Late Owl', trophies: 1876, avatar: '🦇' },
+  { name: 'Nova Mint', elo: 1520, avatar: '🦊' },
+  { name: 'Page Witch', elo: 1340, avatar: '🐈' },
+  { name: 'Desk Goblin', elo: 1180, avatar: '🐸' },
+  { name: 'Late Owl', elo: 960, avatar: '🦇' },
 ];
 
-export default function RankBoard() {
-  const [profile, setProfile] = useState<Profile>({ name: 'Focus Knight', avatar: '🦉' });
-
-  useEffect(() => {
-    loadProfile().then((saved) => {
-      if (saved) setProfile(saved);
-    });
-  }, []);
+/** 이름은 App 이 들고 있는 프로필에서 — 배틀 화면과 같은 이름이 나온다. */
+export default function RankBoard({ profile }: { profile?: Profile }) {
+  const { inv } = useInventory();
+  const myName = profile?.name?.trim() || 'Guest';
 
   const rows = [
     ...RIVALS,
-    { name: profile.name || 'Focus Knight', trophies: 2137, avatar: profile.avatar || '🦉', me: true },
-  ].sort((a, b) => b.trophies - a.trophies);
+    { name: myName, elo: inv.elo, avatar: profile?.avatar || '🦉', me: true },
+  ].sort((a, b) => b.elo - a.elo);
 
   return (
     <ScrollView style={styles.screen} contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
       <View style={styles.heading}>
         <Text style={styles.title}>Season rank</Text>
-        <Text style={styles.subtitle}>Quiet hours add up. Yours are counted here.</Text>
+        <Text style={styles.subtitle}>Ranked by ELO from your battles.</Text>
       </View>
 
       {rows.map((row, index) => {
         const me = 'me' in row;
-        const podium = index < 3;
         return (
           <Card
-            key={row.name}
+            key={row.name + (me ? '-me' : '')}
             level={me ? 2 : 1}
-            tone={me ? 'primary' : 'card'}
+            // 내 줄은 '고른 상태'라 앰버가 아니라 옅은 올리브.
+            tone={me ? 'accent' : 'card'}
             radius={RADIUS.lg}
             style={styles.rowFrame}
             boxStyle={styles.row}
           >
-            <View style={[styles.place, podium && styles.placePodium]}>
-              <Text style={[styles.placeText, podium && styles.placeTextPodium]}>{index + 1}</Text>
+            <View style={styles.place}>
+              <Text style={styles.placeText}>{index + 1}</Text>
             </View>
             <Text style={styles.avatar}>{row.avatar}</Text>
             <Text style={[styles.name, me && styles.nameMe]} numberOfLines={1}>
               {row.name}
             </Text>
-            <View style={styles.trophy}>
-              <Trophy size={14} color={T.primary} strokeWidth={2} />
-              <Text style={styles.trophyText}>{row.trophies.toLocaleString()}</Text>
+            <View style={styles.elo}>
+              <Trophy size={14} color={SEMANTIC.elo.fg} strokeWidth={2.2} />
+              <Text style={styles.eloText}>{row.elo.toLocaleString()}</Text>
+              <Text style={styles.eloUnit}>ELO</Text>
             </View>
           </Card>
         );
@@ -78,12 +78,11 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     backgroundColor: T.bgSunk,
   },
-  placePodium: { backgroundColor: T.accentSoft },
   placeText: { fontFamily: T.fontMedium, color: T.muted, fontSize: 14 },
-  placeTextPodium: { color: T.accentDeep },
   avatar: { fontSize: 27 },
   name: { flex: 1, fontFamily: T.fontMedium, color: T.ink, fontSize: 17 },
-  nameMe: { fontFamily: T.fontBold, color: T.primaryDeep },
-  trophy: { flexDirection: 'row', alignItems: 'center', gap: 5 },
-  trophyText: { fontFamily: T.fontMedium, color: T.primaryDeep, fontSize: 16 },
+  nameMe: { fontFamily: T.fontBold, color: SEMANTIC.selected.fg },
+  elo: { flexDirection: 'row', alignItems: 'baseline', gap: 4 },
+  eloText: { fontFamily: T.fontMedium, color: SEMANTIC.elo.fg, fontSize: 16 },
+  eloUnit: { fontFamily: T.font, color: T.muted, fontSize: 12 },
 });
