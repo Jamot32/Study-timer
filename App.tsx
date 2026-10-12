@@ -4,12 +4,8 @@ import {
   DMSans_500Medium,
   DMSans_700Bold,
 } from '@expo-google-fonts/dm-sans';
-<<<<<<< Updated upstream
-import { Fraunces_600SemiBold } from '@expo-google-fonts/fraunces';
-=======
 import { Fraunces_400Regular_Italic, Fraunces_600SemiBold } from '@expo-google-fonts/fraunces';
 import { PressStart2P_400Regular } from '@expo-google-fonts/press-start-2p';
->>>>>>> Stashed changes
 import { StatusBar } from 'expo-status-bar';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { ScrollView, StyleSheet, View } from 'react-native';
@@ -50,11 +46,8 @@ export default function App() {
     DMSans_500Medium,
     DMSans_700Bold,
     Fraunces_600SemiBold,
-<<<<<<< Updated upstream
-=======
     Fraunces_400Regular_Italic,
     PressStart2P_400Regular,
->>>>>>> Stashed changes
   });
   const [activeTab, setActiveTab] = useState<AppTab>('battle');
   const [battleActive, setBattleActive] = useState(false);

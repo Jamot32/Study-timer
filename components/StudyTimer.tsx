@@ -742,21 +742,6 @@ export function StudyTimer({
       style={[styles.screen, { paddingTop: 4, paddingBottom: 12 }]}
     >
       <View style={styles.frame}>
-<<<<<<< Updated upstream
-        {/* 헤더 */}
-        <View style={styles.header}>
-          <View style={styles.headerLeft}>
-            <Pressable onPress={onOpenProfile} accessibilityRole="button" accessibilityLabel="Edit profile">
-              <Avatar profile={profile} size={40} />
-            </Pressable>
-            <View>
-              <Text style={styles.label} numberOfLines={1}>{title}</Text>
-              <View style={styles.nameRow}>
-                <Text style={styles.name} numberOfLines={1}>
-                  {name}
-                </Text>
-                <Text style={styles.level}>Lv 4</Text>
-=======
         {/* 상단: 나 vs 상대 — 대결 바 한 줄. 상대 정보는 여기에만 둔다. */}
         <View style={styles.duel}>
           <Pressable onPress={onOpenProfile} accessibilityRole="button" accessibilityLabel="Edit profile">
@@ -772,7 +757,6 @@ export function StudyTimer({
               <View style={[styles.duelSide, styles.duelRight]}>
                 <Text style={styles.duelName} numberOfLines={1}>{rivalName}</Text>
                 <Text style={styles.duelTime}>{formatTime(opponentElapsed)}</Text>
->>>>>>> Stashed changes
               </View>
             </>
           ) : null}
