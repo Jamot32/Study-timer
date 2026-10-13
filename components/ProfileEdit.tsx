@@ -14,7 +14,7 @@ import {
   normalizeProfile,
   saveProfile,
   type Profile,
-} from '@/lib/auth';
+} from '@/lib/profile';
 
 const CANVAS = 220;
 

@@ -19,7 +19,7 @@ import CountdownOverlay from './components/CountdownOverlay';
 import { Tabs, TabsContent } from './components/ui/tabs';
 import { T } from './components/nova';
 import { type CpuOpponent } from './lib/cpuOpponent';
-import { loadProfile, normalizeProfile, type Profile } from './lib/auth';
+import { loadProfile, normalizeProfile, type Profile } from './lib/profile';
 import { arenaById, eloAfter, type Arena } from './lib/arena';
 import { outcomeOf, settleMatch, type MatchOutcome } from './lib/match';
 import { SOLO_MIN_MINUTES } from './lib/economy';

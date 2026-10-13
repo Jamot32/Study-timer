@@ -2,7 +2,7 @@ import React from 'react';
 import { ScrollView, StyleSheet, Text, View } from 'react-native';
 import { Trophy } from 'lucide-react-native';
 import { Card, RADIUS, SEMANTIC, T } from './nova';
-import { type Profile } from '../lib/auth';
+import { type Profile } from '../lib/profile';
 import { useInventory } from '../lib/inventory';
 import { Avatar } from './Avatar';
 import { AvatarMark } from './AvatarMark';

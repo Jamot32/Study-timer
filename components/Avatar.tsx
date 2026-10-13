@@ -1,7 +1,7 @@
 import React, { useRef } from 'react';
 import { Image, PanResponder, StyleSheet, View } from 'react-native';
 import { ABS_FILL, elevation, T } from '@/components/nova';
-import { clamp01, isImageAvatar, type Profile, type Sticker } from '@/lib/auth';
+import { clamp01, isImageAvatar, type Profile, type Sticker } from '@/lib/profile';
 import { AvatarMark } from './AvatarMark';
 import { StickerMark } from './StickerMark';
 

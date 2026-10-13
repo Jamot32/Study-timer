@@ -428,9 +428,7 @@ function SearchOverlay({
         <ActivityIndicator size="large" color={T.primary} />
         <Text style={styles.searchEyebrow}>Searching the garden</Text>
         <Text style={styles.searchTime}>00:{elapsed.toString().padStart(2, '0')}</Text>
-        <Text style={styles.searchCopy}>
-          {fallback ? 'No rival nearby — calling in a CPU sparring partner…' : 'Finding a worthy study rival…'}
-        </Text>
+        {!fallback && <Text style={styles.searchCopy}>Finding a worthy study rival…</Text>}
         <Button
           variant="outline"
           onPress={onCancel}

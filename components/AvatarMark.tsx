@@ -1,6 +1,6 @@
 import React from 'react';
 import { Circle, Ellipse, Path, Svg } from 'react-native-svg';
-import { AVATARS } from '@/lib/auth';
+import { AVATARS } from '@/lib/profile';
 
 const LEGACY_AVATARS: Record<string, (typeof AVATARS)[number]> = {
   '🐱': 'cat',

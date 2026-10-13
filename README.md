@@ -11,7 +11,10 @@ A focused study timer app, built with React Native and Expo (iOS + Android).
 
 ```sh
 npm install
-npm run ios       # start on iOS simulator
-npm run android   # start on Android emulator
-npm start         # start dev server (Expo Go / device)
+npm run ios       # build and start the custom development client on iOS
+npm run android   # build and start the custom development client on Android
+npm start         # start Metro for an installed development client
 ```
+
+This app uses native modules and cannot run in Expo Go. After native dependencies
+change, rebuild the development client with `npm run ios` or `npm run android`.
