@@ -1,11 +1,7 @@
 import {
   useFonts,
-  DMSans_400Regular,
   DMSans_500Medium,
-  DMSans_700Bold,
 } from '@expo-google-fonts/dm-sans';
-import { Fraunces_400Regular_Italic, Fraunces_600SemiBold } from '@expo-google-fonts/fraunces';
-import { PressStart2P_400Regular } from '@expo-google-fonts/press-start-2p';
 import { StatusBar } from 'expo-status-bar';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { ScrollView, StyleSheet, View } from 'react-native';
@@ -42,12 +38,7 @@ import { type MatchSummary } from './components/StudyTimer';
 
 export default function App() {
   const [fontsLoaded, fontError] = useFonts({
-    DMSans_400Regular,
     DMSans_500Medium,
-    DMSans_700Bold,
-    Fraunces_600SemiBold,
-    Fraunces_400Regular_Italic,
-    PressStart2P_400Regular,
   });
   const [activeTab, setActiveTab] = useState<AppTab>('battle');
   const [battleActive, setBattleActive] = useState(false);

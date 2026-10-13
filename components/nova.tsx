@@ -49,12 +49,11 @@ export const T = {
   danger: '#A2492F',
   dangerSoft: '#F6E2DA',
 
-  // 글꼴
-  font: 'DMSans_400Regular',
+  // 모든 텍스트는 하단 탭과 같은 DMSans Medium을 사용한다.
+  font: 'DMSans_500Medium',
   fontMedium: 'DMSans_500Medium',
-  fontBold: 'DMSans_700Bold',
-  /** 숫자·제목에 쓰는 세리프. 정원 문패 같은 인상. */
-  fontDisplay: 'Fraunces_600SemiBold',
+  fontBold: 'DMSans_500Medium',
+  fontDisplay: 'DMSans_500Medium',
 } as const;
 
 export const RADIUS = { sm: 8, md: 12, lg: 16, xl: 22, full: 999 } as const;

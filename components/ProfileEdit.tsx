@@ -2,9 +2,12 @@ import { ArrowLeft } from 'lucide-react-native';
 import React, { useCallback, useState } from 'react';
 import { ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { Avatar, type StickerDrag } from '@/components/Avatar';
+import { AvatarMark, avatarId } from '@/components/AvatarMark';
+import { StickerMark, stickerLabel } from '@/components/StickerMark';
 import { Button, RADIUS, T, Tap } from '@/components/nova';
 import {
   AVATARS,
+  AVATAR_LABELS,
   FRAMES,
   MAX_STICKERS,
   STICKERS,
@@ -91,19 +94,23 @@ export default function ProfileEdit({ profile, onProfileChanged, onBack }: Profi
           </View>
           <Text style={styles.hint}>Drag a sticker to move it. Tap one to remove it.</Text>
 
-          <Text style={styles.fieldLabel}>Picture</Text>
+          <Text style={styles.fieldLabel}>Avatar</Text>
           <View style={styles.grid}>
-            {AVATARS.map((glyph) => (
-              <Tap
-                key={glyph}
-                accessibilityLabel={`Picture ${glyph}`}
-                accessibilityState={{ selected: profile.avatar === glyph }}
-                onPress={() => edit({ avatar: glyph })}
-                style={[styles.cell, profile.avatar === glyph ? styles.cellSelected : null]}
-              >
-                <Text style={styles.cellGlyph}>{glyph}</Text>
-              </Tap>
-            ))}
+            {AVATARS.map((avatar) => {
+              const label = AVATAR_LABELS[avatar];
+              const selected = avatarId(profile.avatar) === avatar;
+              return (
+                <Tap
+                  key={avatar}
+                  accessibilityLabel={`Avatar ${label}`}
+                  accessibilityState={{ selected }}
+                  onPress={() => edit({ avatar })}
+                  style={[styles.cell, selected ? styles.cellSelected : null]}
+                >
+                  <AvatarMark avatar={avatar} size={34} />
+                </Tap>
+              );
+            })}
           </View>
 
           <Text style={styles.fieldLabel}>Stickers</Text>
@@ -117,11 +124,11 @@ export default function ProfileEdit({ profile, onProfileChanged, onBack }: Profi
                 <Tap
                   key={glyph}
                   disabled={full}
-                  accessibilityLabel={`Add sticker ${glyph}`}
+                  accessibilityLabel={`Add sticker ${stickerLabel(glyph)}`}
                   onPress={() => addSticker(glyph)}
                   style={[styles.cell, full ? styles.cellFull : null]}
                 >
-                  <Text style={styles.cellGlyph}>{glyph}</Text>
+                  <StickerMark glyph={glyph} size={25} />
                 </Tap>
               );
             })}
@@ -199,7 +206,6 @@ const styles = StyleSheet.create({
   },
   cellFull: { opacity: 0.35 },
   cellSelected: { borderColor: T.primary, backgroundColor: T.primarySoft, borderWidth: 2 },
-  cellGlyph: { fontSize: 25, textAlign: 'center' },
   swatch: {
     width: 46,
     height: 46,

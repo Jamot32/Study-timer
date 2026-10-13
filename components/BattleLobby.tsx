@@ -23,7 +23,15 @@ import {
   Trophy,
   X,
 } from 'lucide-react-native';
-import Svg, { Circle, Ellipse, Path } from 'react-native-svg';
+import Svg, {
+  Circle,
+  Defs,
+  Ellipse,
+  G,
+  LinearGradient as SvgLinearGradient,
+  Path,
+  Stop,
+} from 'react-native-svg';
 import { Button, Card, RADIUS, SEMANTIC, T, Tap, elevation } from './nova';
 import { type Profile } from '../lib/auth';
 import { createCpuOpponent, type CpuOpponent } from '../lib/cpuOpponent';
@@ -50,6 +58,7 @@ import { COUPONS, type Coupon, type CouponId } from '../lib/coupons';
 import { shopById } from '../lib/shop';
 import { useStudiedToday } from '../lib/today';
 import { itemIcon } from './itemMeta';
+import { Avatar } from './Avatar';
 import { COUPON_USE } from '../lib/couponEffects';
 import { couponsAllowed } from '../lib/match';
 
@@ -127,14 +136,19 @@ function ProfileStrip({
   profile,
   tone = 'card',
 }: {
-  profile: { name: string; trophies: number; title: string; avatar: string };
+  profile: {
+    name: string;
+    trophies: number;
+    title: string;
+    avatar: string;
+    frame?: string;
+    stickers?: Profile['stickers'];
+  };
   tone?: 'card' | 'primary' | 'accent';
 }) {
   return (
     <Card level={2} tone={tone} radius={RADIUS.lg} style={styles.stripFrame} boxStyle={styles.profileStrip}>
-      <View style={styles.avatarRing}>
-        <Text style={styles.avatar}>{profile.avatar}</Text>
-      </View>
+      <Avatar profile={profile} size={48} shadow={0} background={T.bgSunk} />
       <View style={styles.profileCopy}>
         <Text style={styles.profileTitle}>{profile.title}</Text>
         <Text style={styles.profileName} numberOfLines={1}>
@@ -156,25 +170,63 @@ function ArenaArt({ rank, overlay }: { rank: Arena; overlay?: React.ReactNode })
     <Card level={2} radius={RADIUS.xl} style={styles.arenaFrame} boxStyle={styles.arenaBorder}>
       <LinearGradient colors={['#F7EFD9', '#FBF8F0', '#EDF0E2']} style={styles.arena}>
         <Svg width="100%" height="100%" viewBox="0 0 300 220" preserveAspectRatio="xMidYMid slice">
-          {/* 해 */}
-          <Circle cx={232} cy={52} r={26} fill={T.primarySoft} />
-          <Circle cx={232} cy={52} r={15} fill="#E9C87E" />
-          {/* 먼 언덕 */}
-          <Path d="M0 150 Q 70 108 150 142 Q 226 176 300 132 L300 220 L0 220 Z" fill="#DCE3CB" />
-          {/* 가까운 언덕 */}
-          <Path d="M0 178 Q 84 142 168 176 Q 240 204 300 172 L300 220 L0 220 Z" fill={T.accentSoft} />
-          {/* 아치 문 */}
-          <Path
-            d="M110 186 L110 116 Q150 78 190 116 L190 186 Z"
-            fill={T.card}
-            stroke={T.accent}
-            strokeWidth={3}
-            strokeLinejoin="round"
-          />
-          <Path d="M150 186 L150 96" stroke={T.accentSoft} strokeWidth={3} />
-          {/* 덤불 */}
-          <Ellipse cx={62} cy={188} rx={34} ry={20} fill="#C7D3AC" />
-          <Ellipse cx={244} cy={192} rx={30} ry={17} fill="#C7D3AC" />
+          <Defs>
+            <SvgLinearGradient id="arenaSky" x1="0" y1="0" x2="0" y2="1">
+              <Stop offset="0" stopColor="#DDE8D8" />
+              <Stop offset="0.64" stopColor="#F4EBD5" />
+              <Stop offset="1" stopColor="#E9E6CF" />
+            </SvgLinearGradient>
+            <SvgLinearGradient id="arenaFarHill" x1="0" y1="0" x2="0.8" y2="1">
+              <Stop offset="0" stopColor="#C6D5B9" />
+              <Stop offset="1" stopColor="#AEBF9F" />
+            </SvgLinearGradient>
+            <SvgLinearGradient id="arenaNearHill" x1="0" y1="0" x2="0.3" y2="1">
+              <Stop offset="0" stopColor="#AFC294" />
+              <Stop offset="1" stopColor="#839C70" />
+            </SvgLinearGradient>
+            <SvgLinearGradient id="arenaDoor" x1="0" y1="0" x2="1" y2="0">
+              <Stop offset="0" stopColor="#D7D9C3" />
+              <Stop offset="0.48" stopColor="#F9F4E3" />
+              <Stop offset="1" stopColor="#C8CFB5" />
+            </SvgLinearGradient>
+          </Defs>
+          <Path d="M0 0h300v220H0z" fill="url(#arenaSky)" />
+          <Circle cx={235} cy={52} r={39} fill="#EACB84" opacity={0.18} />
+          <Circle cx={235} cy={52} r={28} fill="#EACB84" opacity={0.28} />
+          <Circle cx={235} cy={52} r={18} fill="#F1D58F" />
+          <Path d="M235 26v-7m0 66v-7m-26-26h-7m66 0h-7m-44-18-5-5m47 47-5-5m0-37 5-5m-47 47 5-5" stroke="#E2BD6D" strokeWidth={2} strokeLinecap="round" opacity={0.65} />
+          <Path d="M24 61q2-9 12-7 5-12 19-7 8 1 10 10 10-1 11 8H25q-6 0-6-4 0-1 5-2Zm113-22q2-7 10-5 5-10 16-6 7 1 8 8 8-1 9 7h-38q-5 0-5-3Z" fill="#FFFDF3" opacity={0.7} />
+          <Path d="M0 150Q39 125 75 136t67 5q44-29 81-3 35 22 77-4v86H0Z" fill="url(#arenaFarHill)" />
+          <Path d="M0 160q36-20 70-12m148-9q34 16 65-2" fill="none" stroke="#D9E0C8" strokeWidth={2} opacity={0.65} />
+          <Path d="M0 179q51-34 97-15 33 14 59 7 47-14 75-2 37 17 69-2v53H0Z" fill="url(#arenaNearHill)" />
+          <Path d="M0 190q36-20 70-20m159 9q31 12 71-6" fill="none" stroke="#CBD4AD" strokeWidth={2} opacity={0.65} />
+          <Path d="M132 186q10-27 18-43 8 16 18 43l31 34h-98Z" fill="#D9D7BD" opacity={0.9} />
+          <Path d="m146 185 4-34m8 34-8-34m-29 34 29-34m34 34-34-34" stroke="#C2C3A8" strokeWidth={1.5} opacity={0.7} />
+          <Path d="M105 188v-68q0-8 7-15 15-16 38-16t38 16q7 7 7 15v68h-13v-67q0-5-5-10-11-12-27-12t-27 12q-5 5-5 10v67Z" fill="#A97950" opacity={0.5} />
+          <Path d="M110 188v-68q0-7 6-13 13-14 34-14t34 14q6 6 6 13v68Z" fill="url(#arenaDoor)" stroke="#876747" strokeWidth={3} strokeLinejoin="round" />
+          <Path d="M150 94v94" stroke="#B7B99F" strokeWidth={2} />
+          <Path d="M119 124q0-23 31-23t31 23" fill="none" stroke="#FFFDF3" strokeWidth={2} opacity={0.8} />
+          <Circle cx={137} cy={148} r={2.2} fill="#B18A55" />
+          <Circle cx={163} cy={148} r={2.2} fill="#B18A55" />
+          <Path d="M104 188h92" stroke="#76593D" strokeWidth={4} strokeLinecap="round" />
+          <G opacity={0.95}>
+            <Ellipse cx={54} cy={192} rx={38} ry={22} fill="#71895F" />
+            <Circle cx={34} cy={184} r={15} fill="#91A879" />
+            <Circle cx={54} cy={176} r={18} fill="#9EB486" />
+            <Circle cx={73} cy={185} r={16} fill="#829B6B" />
+            <Ellipse cx={249} cy={194} rx={39} ry={20} fill="#71895F" />
+            <Circle cx={229} cy={187} r={15} fill="#91A879" />
+            <Circle cx={249} cy={179} r={18} fill="#9EB486" />
+            <Circle cx={269} cy={188} r={15} fill="#829B6B" />
+          </G>
+          <G>
+            <Path d="M24 205q8-12 15 0m-8-8v10" fill="none" stroke="#4F7650" strokeWidth={2} strokeLinecap="round" />
+            <Circle cx={23} cy={198} r={3} fill="#E9C17A" />
+            <Circle cx={40} cy={197} r={3} fill="#D9826A" />
+            <Path d="M266 207q7-13 14 0m-7-9v11" fill="none" stroke="#4F7650" strokeWidth={2} strokeLinecap="round" />
+            <Circle cx={264} cy={199} r={3} fill="#D9826A" />
+            <Circle cx={280} cy={198} r={3} fill="#E9C17A" />
+          </G>
         </Svg>
 
         {/* 그림 안 좌측 상단에 얹힌다. 정원 문을 가리지 않는 자리다. */}
@@ -402,7 +454,14 @@ function MatchFoundOverlay({
   cpu,
   onCountdown,
 }: {
-  player: { name: string; trophies: number; title: string; avatar: string };
+  player: {
+    name: string;
+    trophies: number;
+    title: string;
+    avatar: string;
+    frame?: string;
+    stickers?: Profile['stickers'];
+  };
   /** 이번 판의 상대. 매칭 순간에 지어진다. */
   opponent: { name: string; trophies: number; title: string; avatar: string };
   /** CPU 상대로 잡힌 판인지. */
@@ -578,6 +637,8 @@ export default function BattleLobby({
     avatar: profile?.avatar || '🦉',
     trophies: inv.elo,
     title: profile?.title?.trim() || 'Night Scholar',
+    frame: profile?.frame,
+    stickers: profile?.stickers,
   };
 
   return (
@@ -588,9 +649,7 @@ export default function BattleLobby({
           accessibilityLabel="Edit your profile"
           style={styles.playerIdentity}
         >
-          <View style={styles.headerAvatar}>
-            <Text style={styles.headerAvatarText}>{player.avatar}</Text>
-          </View>
+          <Avatar profile={player} size={46} shadow={0} background={T.bgSunk} />
           {/* 칭호는 프로필에서 본다. 헤더가 꽉 차서 잘리던 자리다. */}
           <View style={styles.headerCopy}>
             <Text style={styles.headerName} numberOfLines={1}>
@@ -721,17 +780,7 @@ const styles = StyleSheet.create({
     paddingTop: 10,
     paddingBottom: 14,
   },
-  playerIdentity: { flexDirection: 'row', alignItems: 'center', flex: 1, marginRight: 8 },
-  headerAvatar: {
-    width: 46,
-    height: 46,
-    borderRadius: 16,
-    backgroundColor: T.bgSunk,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginRight: 10,
-  },
-  headerAvatarText: { fontSize: 27 },
+  playerIdentity: { flexDirection: 'row', alignItems: 'center', flex: 1, gap: 10, marginRight: 8 },
   headerCopy: { flex: 1 },
   levelLabel: {
     flexShrink: 1,
@@ -980,15 +1029,6 @@ const styles = StyleSheet.create({
   },
   stripFrame: { width: '100%', maxWidth: 320 },
   profileStrip: { flexDirection: 'row', alignItems: 'center', padding: 12 },
-  avatarRing: {
-    width: 48,
-    height: 48,
-    borderRadius: 16,
-    backgroundColor: T.bgSunk,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  avatar: { fontSize: 29 },
   profileCopy: { flex: 1, marginLeft: 12 },
   profileTitle: {
     fontFamily: T.fontMedium,

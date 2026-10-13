@@ -269,7 +269,7 @@ const styles = StyleSheet.create({
   spine: { width: 2, backgroundColor: T.border },
 
   quote: {
-    fontFamily: 'Fraunces_400Regular_Italic',
+    fontFamily: T.fontMedium,
     fontSize: 15,
     lineHeight: 22,
     color: T.muted,

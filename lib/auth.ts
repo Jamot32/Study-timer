@@ -3,8 +3,8 @@ import { storage } from './sessions.ts';
 export const PROFILE_STORAGE_KEY = '@study_timer/profile';
 
 /**
- * `avatar` is either a glyph from AVATARS or an image URI (http:/file:/data:),
- * so swapping in a real picture later needs no storage change.
+ * `avatar` is an AVATARS id or an image URI (http:/file:/data:).
+ * Legacy glyph values are still rendered as their matching avatar.
  * `frame` is the avatar's outer line colour.
  */
 export type Profile = {
@@ -16,7 +16,18 @@ export type Profile = {
   stickers?: Sticker[];
 };
 
-export const AVATARS = ['🐱', '🦊', '🐸', '🐧', '🦉', '👾', '🌙', '⭐'];
+export const AVATARS = ['cat', 'fox', 'frog', 'penguin', 'owl', 'alien', 'moon', 'star'] as const;
+
+export const AVATAR_LABELS: Record<(typeof AVATARS)[number], string> = {
+  cat: 'Cat',
+  fox: 'Fox',
+  frog: 'Frog',
+  penguin: 'Penguin',
+  owl: 'Owl',
+  alien: 'Alien',
+  moon: 'Moon',
+  star: 'Star',
+};
 
 // hex literals, not the T tokens — pixel.tsx imports react-native, which the
 // node self-check cannot load.
