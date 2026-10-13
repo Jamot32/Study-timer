@@ -59,6 +59,22 @@ export const T = {
 
 export const RADIUS = { sm: 8, md: 12, lg: 16, xl: 22, full: 999 } as const;
 
+/**
+ * 개념 하나 = 아이콘 하나 = 색 하나.
+ * 코인·ELO·티켓·쿠폰·FP·명예까지 개념이 많은 앱이라, 이 표를 벗어나 색을 고르면
+ * 같은 숫자가 화면마다 다른 것처럼 읽힌다. 새 화면도 여기서만 색을 가져간다.
+ *
+ * 앰버(primary)는 여기 없다 — 앰버는 화면당 단 하나의 핵심 행동(버튼)에만 쓴다.
+ */
+export const SEMANTIC = {
+  /** 코인. Coins 아이콘, 올리브. 단위 표기는 항상 'coins'. */
+  coin: { fg: T.accentDeep, bg: T.accentSoft },
+  /** ELO. Trophy 아이콘, 중립. 단위 표기는 항상 'ELO'. */
+  elo: { fg: T.inkSoft, bg: T.bgSunk },
+  /** 고른 상태(탭·세그먼트·내 줄). 강조가 아니라 표시라서 옅은 올리브. */
+  selected: { fg: T.accentDeep, bg: T.accentSoft },
+} as const;
+
 export const SPACE = { xs: 4, sm: 8, md: 12, lg: 16, xl: 24 } as const;
 
 /** 얕게 뜬 그림자. level 0 은 그림자 없음. */

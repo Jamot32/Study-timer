@@ -1,7 +1,7 @@
 import React from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import { BarChart3, BookOpen, Store, Swords, Trophy, type LucideIcon } from 'lucide-react-native';
-import { Card, RADIUS, T, Tap } from './nova';
+import { Card, RADIUS, SEMANTIC, T, Tap } from './nova';
 
 /** 모든 화면이 함께 쓰는 하단 탭. */
 export type AppTab = 'roll' | 'stats' | 'battle' | 'rank' | 'shop';
@@ -43,7 +43,7 @@ export default function BottomTabs({
             <View style={[styles.pill, selected && styles.pillActive]}>
               <Icon
                 size={21}
-                color={selected ? T.primaryDeep : T.muted}
+                color={selected ? SEMANTIC.selected.fg : T.muted}
                 strokeWidth={selected ? 2.4 : 1.9}
               />
             </View>
@@ -82,7 +82,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     backgroundColor: 'transparent',
   },
-  pillActive: { backgroundColor: T.primarySoft },
+  pillActive: { backgroundColor: SEMANTIC.selected.bg },
   label: {
     // 글꼴 두께는 고르든 말든 그대로 둔다. Bold 로 바꾸면 글자 폭이 늘어
     // 라벨 가장자리가 밀리고 탭 사이 간격이 들쭉날쭉해 보인다. 색만 바꾼다.
@@ -94,5 +94,5 @@ const styles = StyleSheet.create({
     alignSelf: 'stretch',
     textAlign: 'center',
   },
-  labelActive: { color: T.primaryDeep },
+  labelActive: { color: SEMANTIC.selected.fg },
 });

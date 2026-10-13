@@ -11,8 +11,10 @@ import {
 } from '@/lib/sessions';
 
 const WEEKS = 12;
+// Fixed milestones keep older high scores from making ordinary study look empty.
+const ABSOLUTE_THRESHOLDS = [30, 60, 120, 240].map((minutes) => minutes * 60 * 1000);
 
-/** 빈 날 → 가장 바쁜 날. 옅은 잎사귀에서 시작해 깊은 앰버로 익는 램프. */
+/** 빈 날 → 절대 공부 시간 기준으로 옅은 잎사귀에서 깊은 앰버까지. */
 const LEVEL_COLOR = [T.bgSunk, T.accentSoft, '#C9D4B4', '#DCC078', T.primary];
 
 export interface StudyGraphProps {
@@ -20,14 +22,14 @@ export interface StudyGraphProps {
   weekStartsOn: WeekStart;
 }
 
-/** 0 for no study, else 1–4 bucketed against the busiest day in range. */
-function level(ms: number, maxMs: number): number {
-  if (ms <= 0 || maxMs <= 0) return 0;
-  return Math.min(4, Math.ceil((ms / maxMs) * 4));
+/** 0 for no study, else 1–4 based only on fixed study-time milestones. */
+function level(ms: number): number {
+  if (ms <= 0) return 0;
+  return Math.min(4, 1 + ABSOLUTE_THRESHOLDS.filter((threshold) => ms >= threshold).length);
 }
 
 export default function StudyGraph({ sessions, weekStartsOn }: StudyGraphProps) {
-  const { columns, maxMs, totalMs, activeDays } = useMemo(() => {
+  const { columns, totalMs, activeDays } = useMemo(() => {
     const byDay = dailyTotals(sessions);
     const thisWeek = getWeekStart(new Date(), weekStartsOn);
     const gridStart = new Date(
@@ -38,7 +40,6 @@ export default function StudyGraph({ sessions, weekStartsOn }: StudyGraphProps) 
     const today = dayKey(new Date());
 
     const columns: { key: string; ms: number; future: boolean }[][] = [];
-    let maxMs = 0;
     let totalMs = 0;
     let activeDays = 0;
 
@@ -52,7 +53,6 @@ export default function StudyGraph({ sessions, weekStartsOn }: StudyGraphProps) 
         );
         const key = dayKey(date);
         const ms = byDay.get(key) ?? 0;
-        if (ms > maxMs) maxMs = ms;
         if (ms > 0) {
           totalMs += ms;
           activeDays++;
@@ -61,7 +61,7 @@ export default function StudyGraph({ sessions, weekStartsOn }: StudyGraphProps) 
       }
       columns.push(week);
     }
-    return { columns, maxMs, totalMs, activeDays };
+    return { columns, totalMs, activeDays };
   }, [sessions, weekStartsOn]);
 
   return (
@@ -84,7 +84,7 @@ export default function StudyGraph({ sessions, weekStartsOn }: StudyGraphProps) 
                   styles.cell,
                   day.future
                     ? { backgroundColor: 'transparent', borderColor: 'transparent' }
-                    : { backgroundColor: LEVEL_COLOR[level(day.ms, maxMs)] },
+                    : { backgroundColor: LEVEL_COLOR[level(day.ms)] },
                 ]}
               />
             ))}

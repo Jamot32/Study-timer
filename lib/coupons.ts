@@ -27,7 +27,9 @@ export type Coupon = {
   quote: string;
   /** 말한 이. 없으면 빈 문자열. */
   who: string;
-  /** 오른쪽 쪽에 적히는 효과. 두세 줄로 접힌다. */
+  /** 목록에 한 줄로 보이는 요약. 가격·버튼 옆 남는 폭이 약 20자라 그 안에 쓴다. */
+  tagline: string;
+  /** 오른쪽 쪽에 적히는 효과. 두세 줄로 접힌다. 상세 시트에는 이게 전부 나온다. */
   effect: string;
   /** 즉시 받는 보상인지(true) 다음 판·다음 세션까지 들고 가는지(false). */
   instant?: boolean;
@@ -39,6 +41,7 @@ export const COUPONS: readonly Coupon[] = [
     name: 'Time Shield',
     quote: 'FAILURE IS SIMPLY THE CHANCE TO BEGIN AGAIN.',
     who: 'HENRY FORD',
+    tagline: 'Refund if you lose',
     effect: 'Lose your next duel and it costs you nothing. Your stake comes back to you.',
   },
   {
@@ -46,13 +49,15 @@ export const COUPONS: readonly Coupon[] = [
     name: 'Golden Hour',
     quote: 'TIME IS THE MOST VALUABLE THING A MAN CAN SPEND.',
     who: 'THEOPHRASTUS',
-    effect: 'Your next finished session pays double. Every minute of focus earns two H-Coin.',
+    tagline: 'Next session pays 2×',
+    effect: 'Your next finished session pays double. Every minute of focus earns two coins.',
   },
   {
     id: 'plunderSeal',
     name: 'Plunder Seal',
     quote: 'WINNERS FIND A WAY. LOSERS FIND AN EXCUSE.',
     who: '',
+    tagline: 'Win +50% coins',
     effect: 'Win your next duel and take fifty percent more coins off your rival.',
   },
   {
@@ -60,6 +65,7 @@ export const COUPONS: readonly Coupon[] = [
     name: 'Dice of Fate',
     quote: 'THE DIE IS CAST.',
     who: 'JULIUS CAESAR',
+    tagline: 'Instant random coins',
     effect: 'Paid on the spot. The dice decide how much.',
     instant: true,
   },
@@ -68,6 +74,7 @@ export const COUPONS: readonly Coupon[] = [
     name: 'Anchor of Time',
     quote: 'WHATEVER YOU CAN DO, BEGIN IT TODAY.',
     who: 'GOETHE',
+    tagline: 'Repairs your streak',
     effect: 'Break a study streak or a winning run and this puts it back. Once.',
   },
   {
@@ -75,6 +82,7 @@ export const COUPONS: readonly Coupon[] = [
     name: 'Ticket of Freedom',
     quote: 'NOTHING VENTURED, NOTHING GAINED.',
     who: '',
+    tagline: 'Free ranked entry',
     effect: 'Enter your next ranked duel without staking a coin. Win and the reward is the same.',
   },
   {
@@ -82,6 +90,7 @@ export const COUPONS: readonly Coupon[] = [
     name: 'Time Capsule',
     quote: 'THE BEST WAY TO PREDICT THE FUTURE IS TO CREATE IT.',
     who: 'PETER DRUCKER',
+    tagline: '3 days → timer skin',
     effect: 'Sealed for three days. Study an hour a day and the hardback timer skin is yours.',
   },
   {
@@ -89,6 +98,7 @@ export const COUPONS: readonly Coupon[] = [
     name: 'Compound Scroll',
     quote: 'MANY GRAINS OF DUST MAKE A MOUNTAIN.',
     who: '',
+    tagline: '+5% nightly, 3 nights',
     effect: 'For three nights your coins grow five percent at midnight. Only on days you studied thirty minutes.',
   },
   {
@@ -96,6 +106,7 @@ export const COUPONS: readonly Coupon[] = [
     name: 'Black Market Key',
     quote: 'SECRETS OPEN ONLY TO THOSE WHO ARE READY.',
     who: '',
+    tagline: 'Opens black market',
     effect: 'The hidden bookshop opens for one day. Rare titles and skins at half price.',
   },
 ];

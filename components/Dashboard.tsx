@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { FlatList, RefreshControl, StyleSheet, Text, View } from 'react-native';
 import StudyGraph from '@/components/StudyGraph';
-import { Card, ProgressBar, RADIUS, T } from '@/components/nova';
+import { Card, ProgressBar, RADIUS, SEMANTIC, T } from '@/components/nova';
 import {
   formatDuration,
   getWeekStart,
@@ -127,7 +127,7 @@ export default function Dashboard({
   const stat = (label: string, ms: number, highlight = false) => (
     <Card
       level={0}
-      tone={highlight ? 'primary' : 'alt'}
+      tone={highlight ? 'accent' : 'alt'}
       radius={RADIUS.lg}
       style={styles.statWrap}
       boxStyle={styles.statBox}
@@ -246,7 +246,7 @@ const styles = StyleSheet.create({
     color: T.muted,
   },
   statValue: { fontFamily: T.fontDisplay, fontSize: 22, color: T.ink, marginTop: 8 },
-  statValueHighlight: { color: T.primaryDeep },
+  statValueHighlight: { color: SEMANTIC.selected.fg },
 
   progressBox: { padding: 16 },
   progressHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },

@@ -70,6 +70,8 @@ export default function App() {
   const [battlePane, setBattlePane] = useState<'lobby' | 'settings' | 'profile'>('lobby');
   // 판이 끝나면 정산 결과가 여기 담기고, 로비 대신 결과 화면이 뜬다.
   const [result, setResult] = useState<MatchResultData | null>(null);
+  // ROLL 결과에서 '가방에서 보기'를 누르면 올라간다. 상점 탭이 이걸 보고 가방을 연다.
+  const [bagSignal, setBagSignal] = useState(0);
   // 이번 판이 솔로인지. 솔로는 정산도 ELO 변동도 없고, 끝내면 방 등급만큼 코인이 들어온다.
   const [solo, setSolo] = useState(false);
   // 이번 판에 들고 들어간 쿠폰과 실제로 낸 참가비. 입장할 때 이미 지갑에서 빠졌다.
@@ -345,7 +347,14 @@ export default function App() {
         >
 
           <TabsContent value="roll" className="flex-1 w-full max-w-lg mx-auto">
-            <PageRoll onFocusChange={onRollFocus} refreshKey={refreshKey} />
+            <PageRoll
+              onFocusChange={onRollFocus}
+              refreshKey={refreshKey}
+              onOpenBag={() => {
+                selectTab('shop');
+                setBagSignal((n) => n + 1);
+              }}
+            />
           </TabsContent>
 
           <TabsContent value="stats" className="flex-1 w-full max-w-lg mx-auto">
@@ -385,6 +394,7 @@ export default function App() {
                   refreshKey={refreshKey}
                   matchStarting={countdown !== null}
                   opponent={opponent}
+                  solo={solo}
                   arena={arena}
                   coupons={matchCoupons}
                   onFinished={(summary) => {
@@ -427,11 +437,11 @@ export default function App() {
           </TabsContent>
 
           <TabsContent value="rank" className="flex-1 w-full max-w-lg mx-auto">
-            <RankBoard />
+            <RankBoard profile={profile} />
           </TabsContent>
 
           <TabsContent value="shop" className="flex-1 w-full max-w-lg mx-auto">
-            <Shop refreshKey={refreshKey} />
+            <Shop bagSignal={bagSignal} refreshKey={refreshKey} />
           </TabsContent>
 
         </Tabs>

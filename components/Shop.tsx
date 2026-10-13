@@ -1,12 +1,13 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Modal, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { Check, Coins } from 'lucide-react-native';
-import { Button, Card, RADIUS, T, Tap } from '@/components/nova';
+import { Button, Card, RADIUS, SEMANTIC, T, Tap } from '@/components/nova';
 import {
   applyLedger,
   bagUseBlocked,
   countOf,
   debugSet,
+  equipCoupon,
   settleDailyCoupons,
   spendBagCoupon,
   useInventory,
@@ -14,7 +15,8 @@ import {
 } from '@/lib/inventory';
 import { ARENAS, arenaById, STARTING_ELO } from '@/lib/arena';
 import { DEFAULT_INVENTORY } from '@/lib/inventory';
-import { priceOf, SHOP_SECTIONS, shopById, shopShelf, type ShopEntry } from '@/lib/shop';
+import { priceOf, shopById, shopShelf, type ShopEntry } from '@/lib/shop';
+import { groupInfo, itemGroupOf, itemIcon, ITEM_GROUPS } from '@/components/itemMeta';
 import {
   daysBetween,
   CAPSULE_DAILY_MINUTES,
@@ -53,13 +55,56 @@ function PaneSwitch({ pane, onChange }: { pane: Pane; onChange: (p: Pane) => voi
 function PriceTag({ price }: { price: number }) {
   return (
     <View style={styles.price}>
-      <Coins size={15} color={T.primaryDeep} strokeWidth={2} />
+      <Coins size={15} color={SEMANTIC.coin.fg} strokeWidth={2} />
       <Text style={styles.priceText}>{price.toLocaleString()}</Text>
     </View>
   );
 }
 
-function ShopRow({
+/** 물건 아이콘 칸. 이름을 다 읽지 않아도 훑을 수 있게. */
+function ItemIcon({ entry, size = 40 }: { entry: ShopEntry; size?: number }) {
+  const Icon = itemIcon(entry);
+  return (
+    <View style={[styles.icon, { width: size, height: size, borderRadius: size * 0.3 }]}>
+      <Icon size={size * 0.5} color={T.inkSoft} strokeWidth={2} />
+    </View>
+  );
+}
+
+/**
+ * 물건 한 줄: 아이콘 · 이름 · 짧은 요약 · 오른쪽 행동.
+ * 요약은 자른 문장이 아니라 따로 쓴 tagline 이라 핵심이 잘리지 않는다.
+ * 줄을 누르면 바텀 시트로 전체 설명이 뜬다.
+ */
+function ItemRow({
+  entry,
+  right,
+  onOpen,
+}: {
+  entry: ShopEntry;
+  right: React.ReactNode;
+  onOpen: () => void;
+}) {
+  return (
+    <Card level={1} boxStyle={styles.item}>
+      <Tap onPress={onOpen} accessibilityLabel={`${entry.name}, ${entry.tagline}. Show details`} style={styles.itemTap}>
+        <ItemIcon entry={entry} />
+        <View style={styles.itemCopy}>
+          <Text style={styles.rowName} numberOfLines={1}>
+            {entry.name}
+          </Text>
+          <Text style={styles.itemShort} numberOfLines={1}>
+            {entry.tagline}
+          </Text>
+        </View>
+      </Tap>
+      {right}
+    </Card>
+  );
+}
+
+/** 상점 쪽 오른쪽 끝: 값 + Buy, 이미 가진 꾸밈새면 Owned. */
+function BuyRight({
   entry,
   price,
   owned,
@@ -67,50 +112,80 @@ function ShopRow({
   onBuy,
 }: {
   entry: ShopEntry;
-  /** 지금 값. 암시장이 열린 날엔 정가와 다르다. */
   price: number;
   owned: number;
   coins: number;
   onBuy: () => void;
 }) {
-  const soldOut = entry.unique && owned > 0;
-  const tooPoor = coins < price;
-
+  if (entry.unique && owned > 0) {
+    return (
+      <View style={styles.ownedTag}>
+        <Check size={14} color={SEMANTIC.selected.fg} strokeWidth={2.5} />
+        <Text style={styles.ownedText}>Owned</Text>
+      </View>
+    );
+  }
   return (
-    <Card level={1} boxStyle={styles.row}>
-      <View style={styles.rowHead}>
-        <Text style={styles.rowName} numberOfLines={1}>
-          {entry.name}
-        </Text>
-        {soldOut ? (
-          <View style={styles.ownedTag}>
-            <Check size={14} color={T.accentDeep} strokeWidth={2.5} />
-            <Text style={styles.ownedText}>Owned</Text>
+    <View style={styles.buyBox}>
+      <PriceTag price={price} />
+      {/* 사는 버튼은 앰버를 쓰지 않는다 — 목록 전체가 앰버로 번진다. */}
+      <Button
+        size="sm"
+        variant="outline"
+        disabled={coins < price}
+        onPress={onBuy}
+        accessibilityLabel={`Buy ${entry.name} for ${price} coins`}
+      >
+        Buy
+      </Button>
+    </View>
+  );
+}
+
+/**
+ * 상세 바텀 시트. 전체 설명 · 어떻게 쓰는지 · 보유 개수 · 행동을 한곳에.
+ * 카드를 펼치는 대신 시트로 띄워 목록은 늘 깔끔하게 둔다.
+ */
+function ItemSheet({
+  entry,
+  owned,
+  action,
+  onClose,
+}: {
+  entry: ShopEntry | null;
+  owned: number;
+  action: React.ReactNode;
+  onClose: () => void;
+}) {
+  if (!entry) return null;
+  const group = groupInfo(itemGroupOf(entry));
+  return (
+    <Modal visible transparent animationType="slide" onRequestClose={onClose}>
+      <Tap onPress={onClose} style={styles.sheetBackdrop} accessibilityLabel="Close details">
+        <View />
+      </Tap>
+      <View style={styles.sheet}>
+        <View style={styles.sheetGrip} />
+        <View style={styles.sheetHead}>
+          <ItemIcon entry={entry} size={52} />
+          <View style={styles.sheetTitleBox}>
+            <Text style={styles.sheetTitle}>{entry.name}</Text>
+            <Text style={styles.sheetGroup}>{group.title}</Text>
           </View>
-        ) : (
-          <PriceTag price={price} />
-        )}
+        </View>
+        <Text style={styles.sheetBody}>{entry.blurb}</Text>
+        <View style={styles.sheetHow}>
+          <Text style={styles.sheetHowLabel}>How to use</Text>
+          <Text style={styles.sheetHowText}>{group.howTo}</Text>
+        </View>
+        <View style={styles.sheetFoot}>
+          <Text style={styles.sheetOwned}>
+            {entry.unique ? (owned > 0 ? 'Owned' : 'Not owned') : `You hold ${owned}`}
+          </Text>
+          {action}
+        </View>
       </View>
-
-      <Text style={styles.rowBlurb}>{entry.blurb}</Text>
-
-      <View style={styles.rowFoot}>
-        {!entry.unique && owned > 0 ? (
-          <Text style={styles.ownedCount}>You hold {owned}</Text>
-        ) : (
-          <View />
-        )}
-        <Button
-          size="sm"
-          variant={soldOut || tooPoor ? 'outline' : 'primary'}
-          disabled={soldOut || tooPoor}
-          onPress={onBuy}
-          accessibilityLabel={`Buy ${entry.name} for ${price} coins`}
-        >
-          {soldOut ? 'Owned' : tooPoor ? 'Not enough' : 'Buy'}
-        </Button>
-      </View>
-    </Card>
+    </Modal>
   );
 }
 
@@ -128,24 +203,37 @@ function BagAction({
   const coupon = entry.coupon;
   if (!coupon) return null;
   const use = COUPON_USE[coupon.id];
-  if (use === 'slot') return <Text style={styles.bagNote}>Equip it in a battle slot.</Text>;
-  if (use === 'passive') return <Text style={styles.bagNote}>Works on its own when a streak breaks.</Text>;
+
+  if (use === 'slot') {
+    // 가방에서 바로 배틀 슬롯에 끼운다. 비어 있는 첫 칸으로.
+    const equipped = inv.equipped.includes(coupon.id);
+    const free = inv.equipped.findIndex((slot) => !slot);
+    return (
+      <Button
+        size="sm"
+        variant="outline"
+        disabled={equipped || free < 0}
+        onPress={() => void equipCoupon(free as 0 | 1, coupon.id).then(() => onUsed(0))}
+        accessibilityLabel={`Equip ${entry.name} in a battle slot`}
+      >
+        {equipped ? 'Equipped' : free < 0 ? 'Slots full' : 'Equip'}
+      </Button>
+    );
+  }
+  if (use === 'passive') return <Text style={styles.bagNote}>Automatic</Text>;
   if (use !== 'use' && use !== 'instant') return null;
   const blocked = bagUseBlocked(inv, coupon.id);
   const dice = use === 'instant';
   return (
-    <View style={styles.rowFoot}>
-      <Text style={styles.bagNote}>{blocked ?? (dice ? 'Roll it for coins.' : 'Ready to use.')}</Text>
-      <Button
-        size="sm"
-        variant={blocked ? 'outline' : 'primary'}
-        disabled={!!blocked}
-        onPress={() => void spendBagCoupon(coupon.id).then(({ coins }) => onUsed(coins))}
-        accessibilityLabel={`${dice ? 'Roll' : 'Use'} ${entry.name}`}
-      >
-        {dice ? 'Roll' : 'Use'}
-      </Button>
-    </View>
+    <Button
+      size="sm"
+      variant="outline"
+      disabled={!!blocked}
+      onPress={() => void spendBagCoupon(coupon.id).then(({ coins }) => onUsed(coins))}
+      accessibilityLabel={`${dice ? 'Roll' : 'Use'} ${entry.name}${blocked ? `, ${blocked}` : ''}`}
+    >
+      {dice ? 'Roll' : 'Use'}
+    </Button>
   );
 }
 
@@ -249,13 +337,25 @@ function TestBench({ elo, arenaName, onChange }: { elo: number; arenaName: strin
   );
 }
 
-export default function Shop({ refreshKey = 0 }: { refreshKey?: number } = {}) {
+export default function Shop({ bagSignal = 0, refreshKey = 0 }: { bagSignal?: number; refreshKey?: number } = {}) {
   const [pane, setPane] = useState<Pane>('shop');
+  // 다른 화면이 '가방에서 보기'를 요청하면 가방을 연다.
+  useEffect(() => {
+    if (bagSignal > 0) setPane('bag');
+  }, [bagSignal]);
   const { inv, buy, refresh } = useInventory(refreshKey);
   const today = dayKey(new Date());
   const secretOpen = inv.secretShopDay === today;
   // 가방에서 방금 굴린 주사위. 다른 걸 쓰거나 탭을 옮기면 지운다.
   const [diceResult, setDiceResult] = useState<number | null>(null);
+  // 열려 있는 상세 시트. 상점에서 열었는지 가방에서 열었는지에 따라 행동 버튼이 다르다.
+  const [sheet, setSheet] = useState<{ entry: ShopEntry; mode: Pane } | null>(null);
+
+  const onBagUsed = (coins: number) => {
+    setDiceResult(coins > 0 ? coins : null);
+    setSheet(null);
+    refresh();
+  };
 
   // 며칠에 걸친 쿠폰(타임캡슐·복리)은 지나간 날을 여기서도 한 번 정산한다.
   useEffect(() => {
@@ -287,7 +387,7 @@ export default function Shop({ refreshKey = 0 }: { refreshKey?: number } = {}) {
           </Text>
         </View>
         <View style={styles.wallet}>
-          <Coins size={17} color={T.primaryDeep} strokeWidth={2} />
+          <Coins size={17} color={SEMANTIC.coin.fg} strokeWidth={2} />
           <Text style={styles.walletText}>{inv.coins.toLocaleString()}</Text>
         </View>
       </View>
@@ -305,21 +405,28 @@ export default function Shop({ refreshKey = 0 }: { refreshKey?: number } = {}) {
         <TestBench elo={inv.elo} arenaName={arenaById(inv.arenaId).name} onChange={refresh} />
 
         {pane === 'shop'
-          ? SHOP_SECTIONS.map((section) => {
-              const entries = shopShelf(secretOpen).filter((e) => e.kind === section.kind);
+          ? // 상점도 가방처럼 쓰는 방식으로 묶는다 — 아홉 가지가 한눈에 갈린다.
+            ITEM_GROUPS.map((group) => {
+              const entries = shopShelf(secretOpen).filter((e) => itemGroupOf(e) === group.key);
               if (!entries.length) return null;
               return (
-                <View key={section.kind} style={styles.section}>
-                  <Text style={styles.sectionTitle}>{section.title}</Text>
-                  <Text style={styles.sectionHint}>{section.hint}</Text>
+                <View key={group.key} style={styles.section}>
+                  <Text style={styles.sectionTitle}>{group.title}</Text>
+                  <Text style={styles.sectionHint}>{group.hint}</Text>
                   {entries.map((entry) => (
-                    <ShopRow
+                    <ItemRow
                       key={entry.id}
                       entry={entry}
-                      price={priceOf(entry, secretOpen)}
-                      owned={countOf(inv, entry.id)}
-                      coins={inv.coins}
-                      onBuy={() => buy(entry.id, priceOf(entry, secretOpen), entry.unique)}
+                      onOpen={() => setSheet({ entry, mode: 'shop' })}
+                      right={
+                        <BuyRight
+                          entry={entry}
+                          price={priceOf(entry, secretOpen)}
+                          owned={countOf(inv, entry.id)}
+                          coins={inv.coins}
+                          onBuy={() => buy(entry.id, priceOf(entry, secretOpen), entry.unique)}
+                        />
+                      }
                     />
                   ))}
                 </View>
@@ -341,28 +448,62 @@ export default function Shop({ refreshKey = 0 }: { refreshKey?: number } = {}) {
                   </Card>
                 ) : null,
                 <ActiveEffects key="active" inv={inv} today={today} />,
-                ...bag.map(({ entry, count }) => (
-                <Card key={entry.id} level={1} boxStyle={styles.row}>
-                  <View style={styles.rowHead}>
-                    <Text style={styles.rowName} numberOfLines={1}>
-                      {entry.name}
-                    </Text>
-                    <View style={styles.countTag}>
-                      <Text style={styles.countText}>{entry.unique ? 'Owned' : `x${count}`}</Text>
+                ...ITEM_GROUPS.map((group) => {
+                  const rows = bag.filter(({ entry }) => itemGroupOf(entry) === group.key);
+                  if (!rows.length) return null;
+                  return (
+                    <View key={group.key} style={styles.section}>
+                      <Text style={styles.sectionTitle}>{group.title}</Text>
+                      <Text style={styles.sectionHint}>{group.hint}</Text>
+                      {rows.map(({ entry, count }) => (
+                        <ItemRow
+                          key={entry.id}
+                          entry={entry}
+                          onOpen={() => setSheet({ entry, mode: 'bag' })}
+                          right={
+                            <View style={styles.buyBox}>
+                              <View style={styles.countTag}>
+                                <Text style={styles.countText}>
+                                  {entry.unique ? 'Owned' : `x${count}`}
+                                </Text>
+                              </View>
+                              <BagAction inv={inv} entry={entry} onUsed={onBagUsed} />
+                            </View>
+                          }
+                        />
+                      ))}
                     </View>
-                  </View>
-                  <Text style={styles.rowBlurb}>{entry.blurb}</Text>
-                  <BagAction
-                    inv={inv}
-                    entry={entry}
-                    onUsed={(coins) => {
-                      setDiceResult(coins > 0 ? coins : null);
-                      refresh();
-                    }}
-                  />
-                </Card>
-              ))]}
+                  );
+                })]}
       </ScrollView>
+
+      <ItemSheet
+        entry={sheet?.entry ?? null}
+        owned={sheet ? countOf(inv, sheet.entry.id) : 0}
+        onClose={() => setSheet(null)}
+        action={
+          !sheet ? null : sheet.mode === 'shop' ? (
+            <BuyRight
+              entry={sheet.entry}
+              price={priceOf(sheet.entry, secretOpen)}
+              owned={countOf(inv, sheet.entry.id)}
+              coins={inv.coins}
+              onBuy={() =>
+                void buy(sheet.entry.id, priceOf(sheet.entry, secretOpen), sheet.entry.unique)
+              }
+            />
+          ) : (
+            <View style={styles.buyBox}>
+              {sheet.entry.coupon &&
+              (itemGroupOf(sheet.entry) === 'use' || itemGroupOf(sheet.entry) === 'instant') &&
+              bagUseBlocked(inv, sheet.entry.coupon.id) ? (
+                <Text style={styles.bagNote}>{bagUseBlocked(inv, sheet.entry.coupon.id)}</Text>
+              ) : null}
+              <BagAction inv={inv} entry={sheet.entry} onUsed={onBagUsed} />
+            </View>
+          )
+        }
+      />
     </View>
   );
 }
@@ -381,9 +522,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 9,
     borderRadius: RADIUS.md,
-    backgroundColor: T.primarySoft,
+    backgroundColor: SEMANTIC.coin.bg,
   },
-  walletText: { fontFamily: T.fontBold, fontSize: 16, color: T.primaryDeep },
+  walletText: { fontFamily: T.fontBold, fontSize: 16, color: SEMANTIC.coin.fg },
 
   segmented: {
     flexDirection: 'row',
@@ -404,6 +545,49 @@ const styles = StyleSheet.create({
   sectionHint: { fontFamily: T.font, fontSize: 14, color: T.muted, marginTop: -6, marginBottom: 2 },
 
   row: { padding: 16, gap: 8 },
+  // 한 줄 — 아이콘 · 이름 · 짧은 요약 · 오른쪽 행동
+  item: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 11, paddingHorizontal: 12 },
+  itemTap: { flex: 1, minWidth: 0, flexDirection: 'row', alignItems: 'center', gap: 12 },
+  itemCopy: { flex: 1, minWidth: 0 },
+  itemShort: { fontFamily: T.font, fontSize: 13, color: T.muted, marginTop: 2 },
+  icon: { alignItems: 'center', justifyContent: 'center', backgroundColor: T.bgSunk },
+
+  // 상세 바텀 시트
+  sheetBackdrop: { flex: 1, backgroundColor: 'rgba(34,38,28,0.4)' },
+  sheet: {
+    backgroundColor: T.card,
+    borderTopLeftRadius: RADIUS.xl,
+    borderTopRightRadius: RADIUS.xl,
+    paddingHorizontal: 20,
+    paddingTop: 10,
+    paddingBottom: 34,
+    gap: 14,
+  },
+  sheetGrip: { alignSelf: 'center', width: 40, height: 4, borderRadius: 2, backgroundColor: T.border },
+  sheetHead: { flexDirection: 'row', alignItems: 'center', gap: 14 },
+  sheetTitleBox: { flex: 1 },
+  sheetTitle: { fontFamily: T.fontDisplay, fontSize: 22, color: T.ink },
+  sheetGroup: {
+    fontFamily: T.fontMedium,
+    fontSize: 11,
+    letterSpacing: 1,
+    textTransform: 'uppercase',
+    color: T.muted,
+    marginTop: 3,
+  },
+  sheetBody: { fontFamily: T.font, fontSize: 16, lineHeight: 24, color: T.ink },
+  sheetHow: { padding: 14, borderRadius: RADIUS.md, backgroundColor: T.cardAlt, gap: 4 },
+  sheetHowLabel: {
+    fontFamily: T.fontMedium,
+    fontSize: 11,
+    letterSpacing: 1,
+    textTransform: 'uppercase',
+    color: T.muted,
+  },
+  sheetHowText: { fontFamily: T.font, fontSize: 14, lineHeight: 21, color: T.inkSoft },
+  sheetFoot: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12 },
+  sheetOwned: { fontFamily: T.fontMedium, fontSize: 14, color: T.muted },
+  buyBox: { flexDirection: 'row', alignItems: 'center', gap: 10, flexShrink: 0 },
   rowHead: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 10 },
   rowName: { flex: 1, fontFamily: T.fontMedium, fontSize: 17, color: T.ink },
   rowBlurb: { fontFamily: T.font, fontSize: 14, lineHeight: 21, color: T.muted },
@@ -411,12 +595,12 @@ const styles = StyleSheet.create({
   ownedCount: { fontFamily: T.fontMedium, fontSize: 14, color: T.accentDeep },
 
   price: { flexDirection: 'row', alignItems: 'center', gap: 5 },
-  priceText: { fontFamily: T.fontBold, fontSize: 16, color: T.primaryDeep },
+  priceText: { fontFamily: T.fontBold, fontSize: 16, color: SEMANTIC.coin.fg },
 
   ownedTag: { flexDirection: 'row', alignItems: 'center', gap: 5 },
   ownedText: { fontFamily: T.fontMedium, fontSize: 14, color: T.accentDeep },
-  countTag: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: RADIUS.full, backgroundColor: T.accentSoft },
-  countText: { fontFamily: T.fontMedium, fontSize: 14, color: T.accentDeep },
+  countTag: { paddingHorizontal: 9, paddingVertical: 3, borderRadius: RADIUS.full, backgroundColor: T.bgSunk },
+  countText: { fontFamily: T.fontMedium, fontSize: 13, color: T.inkSoft },
 
   // ⚠️ 임시 — 테스트 판 스타일
   bench: { padding: 14, gap: 8, borderStyle: 'dashed', borderWidth: 1, borderColor: T.borderStrong },
@@ -430,7 +614,7 @@ const styles = StyleSheet.create({
   benchHint: { fontFamily: T.font, fontSize: 13, lineHeight: 19, color: T.muted },
   benchRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
 
-  bagNote: { flex: 1, fontFamily: T.font, fontSize: 13, color: T.accentDeep },
+  bagNote: { fontFamily: T.font, fontSize: 13, color: T.muted },
   active: { padding: 16, gap: 10 },
   activeTitle: { fontFamily: T.fontMedium, fontSize: 16, color: T.accentDeep },
   activeBody: { fontFamily: T.font, fontSize: 14, lineHeight: 20, color: T.accentDeep, opacity: 0.85 },

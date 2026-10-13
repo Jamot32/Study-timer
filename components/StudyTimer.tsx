@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { Alert, Animated, AppState, Easing, Platform, Pressable, StyleSheet, Text, View } from 'react-native'
+import { Alert, Animated, AppState, Easing, Modal, Platform, Pressable, StyleSheet, Text, View } from 'react-native'
 import { LinearGradient } from 'expo-linear-gradient'
-import { Check, Coins, Flag, Flame, Moon, Pause, Play, RotateCcw, Sun } from 'lucide-react-native'
+import { Check, Coffee, Coins, Flag, Flame, Info, Moon, Pause, Play, Sun } from 'lucide-react-native'
 import Svg, { Circle, Defs, LinearGradient as SvgGradient, Stop } from 'react-native-svg'
 import { confirmDestructive } from '../lib/confirm'
 import { useStudyTimer } from '../lib/useStudyTimer'
@@ -48,7 +48,7 @@ const BREAK_EARN_SECONDS = HOUR_SECONDS
 // ---------- 대전 ----------
 // 방이 없을 때(연습 등) 쓰는 기본 판 길이. 보통은 arena.matchSeconds 가 이 값을 대신한다.
 const BATTLE_MAX_SECONDS = 5 * 3600
-// 집중 1분에 H-Coin 하나.
+// 집중 1분에 코인 하나.
 const COIN_SECONDS = 60
 // 상대가 한 시간을 채울 때마다 불꽃이 한 단계 더 거세진다. 5단계가 끝.
 const FLAME_STAGES = 5
@@ -73,6 +73,8 @@ const DIAL = {
   gaugeDeep: '#556B2F',
   amber: '#F59E0B',
   amberDeep: '#D97706',
+  /** 어두운 다이얼 위의 코인. 앱 전체의 '코인 = 올리브'를 밝게 옮긴 값. */
+  coin: '#B9CC8E',
   text: '#F3F4F6',
   textDim: '#A7AD99',
 } as const
@@ -171,6 +173,16 @@ const formatTime = (totalSeconds: number) => {
   return `${h}:${m}:${s}`
 }
 
+/**
+ * 분 단위 표기는 이것 하나로 — '24 min', '1h 12m'.
+ * 시계 표기(00:00:19)는 돌고 있는 타이머에만 쓴다. 한 화면에 0m · 0H 00M · 0 min 이 섞이지 않게.
+ */
+const formatMinutes = (minutes: number) => {
+  const h = Math.floor(minutes / 60)
+  const m = minutes % 60
+  return h > 0 ? `${h}h ${m}m` : `${m} min`
+}
+
 /** '4h 12m' / '48m'. 기록과 매치 시간을 나란히 읽히게 하는 짧은 표기. */
 const formatSpan = (totalSeconds: number) => {
   const hours = Math.floor(totalSeconds / 3600)
@@ -185,12 +197,18 @@ const formatWeeklyMax = (totalSeconds: number) => {
 }
 
 /** 대전 격차용. 한 시간을 넘으면 시:분:초, 아니면 분:초. */
+/**
+ * 격차는 시계가 아니라 말로 — '4s', '2m 10s', '1h 5m'.
+ * 시계 표기(00:00:04)는 돌고 있는 타이머에만 쓴다. 차이를 시계로 쓰면 또 하나의 타이머처럼 읽힌다.
+ */
 const formatGap = (totalSeconds: number) => {
   const s = Math.abs(totalSeconds)
-  const mm = Math.floor((s % 3600) / 60).toString().padStart(2, '0')
-  const ss = (s % 60).toString().padStart(2, '0')
-  if (s >= 3600) return `${Math.floor(s / 3600)}:${mm}:${ss}`
-  return `${mm}:${ss}`
+  const h = Math.floor(s / 3600)
+  const m = Math.floor((s % 3600) / 60)
+  const sec = s % 60
+  if (h > 0) return `${h}h ${m}m`
+  if (m > 0) return sec > 0 && m < 10 ? `${m}m ${sec}s` : `${m}m`
+  return `${sec}s`
 }
 
 const clamp01 = (value: number) => Math.max(0, Math.min(1, value))
@@ -328,6 +346,7 @@ export function StudyTimer({
   onResign,
   matchStarting = false,
   opponent,
+  solo = false,
   arena,
   coupons = NO_COUPONS,
   profile,
@@ -342,6 +361,8 @@ export function StudyTimer({
   matchStarting?: boolean
   /** 이번 판의 상대. 매칭 때 지어진 CPU 가 그대로 넘어온다. */
   opponent?: CpuOpponent | null
+  /** This session was started as a solo run rather than a duel. */
+  solo?: boolean
   /** 이번 판의 티어. 판 길이와 판돈이 여기서 온다. */
   arena?: Arena | null
   /** 이번 판에 들고 들어온 쿠폰. 입장할 때 이미 한 장씩 빠졌다. */
@@ -366,6 +387,9 @@ export function StudyTimer({
   const [isFinishing, setIsFinishing] = useState(false)
   const [level, setLevel] = useState(1)
   const [confirmResign, setConfirmResign] = useState(false)
+  // FP 설명 한 줄, 휴식 고르기 시트
+  const [fpHelp, setFpHelp] = useState(false)
+  const [breakSheet, setBreakSheet] = useState(false)
   // 상대는 cpuOpponent 모델이 1초씩 굴려 준다. 쉬기도 하고, 기권도 한다.
   const [cpu, setCpu] = useState<CpuState | null>(null)
 
@@ -465,7 +489,44 @@ export function StudyTimer({
   const flameAlive = cpu?.phase === 'studying'
   const rivalName = opponent?.name ?? 'Rival'
   // 내가 앞서면 양수. 브레이크 시간은 대전에 안 들어간다.
-  const lead = focusElapsed - opponentElapsed
+  /*
+   * 격차 표시는 흔들리지 않게 따로 다듬는다.
+   * 내 시계는 0.1초마다 실제 시각으로, 상대 시계는 별도의 1초 타이머로 올라가서
+   * 두 시계의 '초가 넘어가는 순간'이 어긋나 있다. 그대로 빼면 매초 1초가 벌어졌다 돌아오고,
+   * 0 근처에선 ▲ahead ↔ ▼behind 가 깜빡인다.
+   *  1) 1초에 한 번, 같은 순간에 두 값을 읽는다.
+   *  2) 1초짜리 변화는 두 번 연속 같은 값이 나와야 받아들인다. 2초 이상 벌어지면 바로 반영.
+   *  3) ±1초 이내는 'Even' — 이 정도 차이는 박자 어긋남이지 실제 격차가 아니다.
+   */
+  const oppRef = useRef(0)
+  oppRef.current = opponentElapsed
+  const shownLeadRef = useRef(0)
+  const pendingLead = useRef<number | null>(null)
+  const [shownLead, setShownLead] = useState(0)
+  useEffect(() => {
+    if (!hasRival) return
+    shownLeadRef.current = 0
+    pendingLead.current = null
+    setShownLead(0)
+    const id = setInterval(() => {
+      const raw = focusRef.current - oppRef.current
+      const prev = shownLeadRef.current
+      let next = prev
+      if (Math.abs(raw - prev) >= 2) next = raw
+      else if (raw !== prev) {
+        if (pendingLead.current === raw) next = raw
+        else pendingLead.current = raw
+      } else pendingLead.current = null
+      if (next !== prev) {
+        shownLeadRef.current = next
+        pendingLead.current = null
+        setShownLead(next)
+      }
+    }, 1000)
+    return () => clearInterval(id)
+  }, [hasRival, opponent])
+  const LEAD_DEADBAND = 1
+  const lead = Math.abs(shownLead) <= LEAD_DEADBAND ? 0 : shownLead
   const coins = Math.floor(focusElapsed / COIN_SECONDS)
   // 승패를 가르는 값. 공부 시간이 아니라 이쪽이 겨뤄진다.
   const myFp = computeFp({ matchSeconds: focusElapsed }).total
@@ -496,7 +557,7 @@ export function StudyTimer({
     if (elapsedMs === 0 || isFinishing) return
     setIsFinishing(true)
     try {
-      const session = await finish()
+      const session = await finish(solo ? 'solo' : `vs ${opponent?.name ?? 'Rival'}`)
       earnedHours.current = 0
       if (session !== null) {
         // 황금 시간은 판에서 처음 끝낸 세션에만 걸린다.
@@ -535,6 +596,8 @@ export function StudyTimer({
     onBreak,
     onFinished,
     opponentElapsed,
+    opponent?.name,
+    solo,
     theirFp,
   ])
 
@@ -695,88 +758,42 @@ export function StudyTimer({
       style={[styles.screen, { paddingTop: 4, paddingBottom: 12 }]}
     >
       <View style={styles.frame}>
-        {/* 헤더 */}
-        <View style={styles.header}>
-          <View style={styles.headerLeft}>
-            <Pressable onPress={onOpenProfile} accessibilityRole="button" accessibilityLabel="Edit profile">
-              <Avatar profile={profile} size={40} />
-            </Pressable>
-            <View>
-              <Text style={styles.label} numberOfLines={1}>{title}</Text>
-              <View style={styles.nameRow}>
-                <Text style={styles.name} numberOfLines={1}>
-                  {name}
-                </Text>
-                <Text style={styles.level}>Lv {level}</Text>
+        {/* 상단: 나 vs 상대 — 대결 바 한 줄. 상대 정보는 여기에만 둔다. */}
+        <View style={styles.duel}>
+          <Pressable onPress={onOpenProfile} accessibilityRole="button" accessibilityLabel="Edit profile">
+            <Avatar profile={profile} size={34} />
+          </Pressable>
+          <View style={styles.duelSide}>
+            <Text style={styles.duelName} numberOfLines={1}>{name}</Text>
+            {hasRival ? <Text style={styles.duelTime}>{formatTime(focusElapsed)}</Text> : null}
+          </View>
+          {hasRival ? (
+            <>
+              <Text style={styles.duelVs}>vs</Text>
+              <View style={[styles.duelSide, styles.duelRight]}>
+                <Text style={styles.duelName} numberOfLines={1}>{rivalName}</Text>
+                <Text style={styles.duelTime}>{formatTime(opponentElapsed)}</Text>
               </View>
-            </View>
-          </View>
-
-          {/* 상대 시계는 눌러서 보는 게 아니라 늘 작게 붙어 있다. */}
-          {hasRival && (
-            <View style={styles.rivalChip}>
-              <Text style={styles.rivalLabel} numberOfLines={1}>
-                {rivalName}
-              </Text>
-              <Text style={styles.rivalTime}>{formatTime(opponentElapsed)}</Text>
-              {cpu && <Text style={styles.rivalStatus}>{cpuStatusLabel(cpu)}</Text>}
-            </View>
-          )}
+            </>
+          ) : null}
         </View>
 
-        {/* 상태 줄 */}
-        <View style={styles.statusRow}>
-          <View>
-            <Text style={styles.label}>{onBreak ? 'Short break' : 'Focus'}</Text>
-            <Text style={styles.statusText}>
-              {isRunning ? 'In session' : 'Ready when you are'}
-            </Text>
-            {arena && (
-              <Text style={[styles.rankLine, { color: arena.color }]}>
-                {arena.name} · {formatMatchLength(arena.matchSeconds)} match ·{' '}
-                {hasRival
-                  ? coupons.includes('freeEntry')
-                    ? 'entry on a ticket'
-                    : `${arena.entryFee} coins staked`
-                  : `solo, +${arena.soloReward} on finish`}
-              </Text>
-            )}
-            {coupons.length > 0 && (
-              <Text style={styles.couponLine} numberOfLines={2}>
-                Carrying {coupons.map((id) => COUPONS.find((c) => c.id === id)?.name ?? id).join(' · ')}
-              </Text>
-            )}
-          </View>
-          <Card level={0} tone="alt" radius={RADIUS.md} boxStyle={styles.weeklyBox}>
-            <Text style={styles.weeklyLabel}>Weekly max</Text>
-            <Text style={styles.weeklyValue}>{formatWeeklyMax(weeklyMax)}</Text>
-          </Card>
-        </View>
-
-        {/* 기록과 매치를 나란히 둔다. 4원화 설계의 물리적 구현이라
-            합치거나 한쪽만 보여 주는 순간 "시간을 깎였다"는 오해가 생긴다.
-            이 자리는 어떤 레이아웃 변경에도 양보하지 않는다. */}
-        {inBattle && (
-          <Card level={0} tone="alt" radius={RADIUS.md} boxStyle={styles.truthBar}>
-            <View style={styles.truthCell}>
-              <Text style={styles.truthLabel}>Studied today</Text>
-              <Text style={styles.truthValue}>{formatSpan(studiedTodayMinutes * 60)}</Text>
-              <Text style={styles.truthNote}>kept forever</Text>
-            </View>
-            <View style={styles.truthDivider} />
-            <View style={styles.truthCell}>
-              <Text style={styles.truthLabel}>Counts in this match</Text>
-              <Text style={[styles.truthValue, { color: T.primaryDeep }]}>
-                {formatSpan(focusElapsed)}
-              </Text>
-              <Text style={styles.truthNote}>
-                {myFp} FP{hasRival ? ` · rival ${theirFp}` : ''}
-              </Text>
-            </View>
-          </Card>
+        {/* 판 정보는 작게 한 줄. 세션 중이라는 건 화면 자체가 말해 준다. */}
+        {arena && (
+          <Text style={styles.matchLine} numberOfLines={1}>
+            {arena.name} · {formatMatchLength(arena.matchSeconds)} ·{' '}
+            {hasRival
+              ? coupons.includes('freeEntry')
+                ? 'entry on a ticket'
+                : `entry ${arena.entryFee} coins`
+              : `solo, +${arena.soloReward} coins on finish`}
+            {coupons.length > 0
+              ? ` · ${coupons.map((id) => COUPONS.find((c) => c.id === id)?.name ?? id).join(', ')}`
+              : ''}
+          </Text>
         )}
 
-        {/* 다이얼 */}
+        {/* 다이얼 — 시간을 가운데, 위아래 한 줄씩. 테두리가 이번 한 시간의 진행 링이다. */}
         <View style={styles.dialWrap}>
           <View style={styles.dial}>
             {/* 세 색을 부드럽게 녹인 하늘. 밴딩 없이 이어진다. */}
@@ -789,28 +806,25 @@ export function StudyTimer({
             <View style={[ABS_FILL, { backgroundColor: DIAL.base, opacity: SKY_DIM }]} />
             <DialRing progress={hourProgress} colors={lapColors} opponent={opponentProgress} heat={flameHeat} />
             <View style={styles.dialContent}>
-              {/* 위: 상대가 있으면 격차, 아니면 지금 붙잡고 있는 과목 */}
-              {hasRival ? (
-                <View style={styles.dialTop}>
-                  <Text style={[styles.gapText, { color: lead >= 0 ? DIAL.gauge : DIAL.amber }]}>
-                    {lead >= 0 ? '▲' : '▼'} {lead >= 0 ? '+' : '-'}
-                    {formatGap(lead)}
-                  </Text>
-                  <Text style={styles.dialSub} numberOfLines={1}>
-                    vs {rivalName}
-                  </Text>
-                </View>
+              {/* 위: 멈춤 > 앞섬/뒤짐 > 솔로 */}
+              {paused ? (
+                <Animated.Text style={[styles.pausedText, { opacity: blink }]}>PAUSED</Animated.Text>
+              ) : hasRival ? (
+                <Text
+                  style={[
+                    styles.gapText,
+                    { color: lead > 0 ? DIAL.gauge : lead < 0 ? DIAL.amber : DIAL.textDim },
+                  ]}
+                >
+                  {lead === 0
+                    ? 'Even'
+                    : `${lead > 0 ? '▲' : '▼'} ${formatGap(lead)} ${lead > 0 ? 'ahead' : 'behind'}`}
+                </Text>
               ) : (
-                <View style={styles.dialTop}>
-                  <View style={styles.cycleRow}>
-                    <SkyIcon size={14} color={DIAL.textDim} />
-                    <Text style={styles.cycleText}>{FOCUS_SUBJECT}</Text>
-                  </View>
-                  <Text style={styles.dialSub}>{isDay ? 'Day cycle' : 'Night cycle'}</Text>
-                </View>
+                <Text style={styles.dialSub}>{onBreak ? 'On a break' : 'Solo focus'}</Text>
               )}
 
-              {/* 가운데: 시:분:초 */}
+              {/* 가운데: 시:분:초 — 시계 표기는 돌고 있는 타이머에만 쓴다 */}
               <Text
                 style={styles.time}
                 numberOfLines={1}
@@ -821,19 +835,10 @@ export function StudyTimer({
                 {time}
               </Text>
 
-              {/* 아래: 실시간 재화와 상태 */}
-              <View style={styles.dialBottom}>
-                <View style={styles.coinRow}>
-                  <Coins size={13} color={DIAL.amber} strokeWidth={2.4} />
-                  <Text style={styles.coinText}>+{coins} H-Coin</Text>
-                </View>
-                {paused ? (
-                  <Animated.Text style={[styles.pausedText, { opacity: blink }]}>PAUSED</Animated.Text>
-                ) : (
-                  <Text style={styles.dialSub}>
-                    {hoursDone > 0 ? `${hoursDone}H done · lap ${hoursDone + 1}` : 'First lap'}
-                  </Text>
-                )}
+              {/* 아래: 이번 세션이 벌고 있는 코인 */}
+              <View style={styles.coinRow}>
+                <Coins size={13} color={DIAL.coin} strokeWidth={2.4} />
+                <Text style={styles.coinText}>+{coins} coins</Text>
               </View>
             </View>
 
@@ -863,91 +868,138 @@ export function StudyTimer({
           </View>
         </View>
 
-        <View style={styles.progressWrap}>
-          <View style={styles.hourRow}>
-            <Text style={styles.label}>{hoursDone > 0 ? `Hour ${hoursDone + 1}` : 'This hour'}</Text>
-            <Text style={styles.hourValue}>{Math.round(hourProgress * 100)}%</Text>
-          </View>
-          {/* 링과 같은 색으로 찬다. 바퀴가 바뀌면 여기 색도 같이 바뀐다. */}
-          <ProgressBar value={hourProgress} height={8} color={lapColors[0]} />
-        </View>
+        {/* 기록과 매치를 나란히 둔다. 4원화 설계의 물리적 구현이라
+            합치거나 한쪽만 보여 주는 순간 "시간을 깎였다"는 오해가 생긴다.
+            이 자리는 어떤 레이아웃 변경에도 양보하지 않는다. */}
+        {inBattle && (
+          <Card level={0} tone="alt" radius={RADIUS.md} boxStyle={styles.truthBar}>
+            <View style={styles.truthCell}>
+              <Text style={styles.truthLabel}>Studied today</Text>
+              <Text style={styles.truthValue}>{formatMinutes(studiedTodayMinutes)}</Text>
+              <Text style={styles.truthNote}>kept forever</Text>
+            </View>
+            <View style={styles.truthDivider} />
+            <View style={styles.truthCell}>
+              <Text style={styles.truthLabel}>In this match</Text>
+              <Text style={styles.truthValue}>{formatMinutes(Math.floor(focusElapsed / 60))}</Text>
+              {/* FP 를 풀어 쓰고, 누르면 무엇인지 한 줄로 알려 준다. */}
+              <Pressable
+                onPress={() => setFpHelp((v) => !v)}
+                accessibilityRole="button"
+                accessibilityLabel="What are focus points?"
+                hitSlop={6}
+                style={styles.fpRow}
+              >
+                <Text style={styles.truthNote}>
+                  {myFp} focus pts{hasRival ? ` · rival ${theirFp}` : ''}
+                </Text>
+                <Info size={12} color={T.muted} strokeWidth={2.2} />
+              </Pressable>
+            </View>
+          </Card>
+        )}
+        {fpHelp ? (
+          <Text style={styles.fpHelp}>
+            Focus points decide the match: one per minute focused, plus small bonuses. Coupons can add at
+            most 30%.
+          </Text>
+        ) : null}
 
-        {/* 컨트롤 */}
+        {/* 컨트롤: 주 행동 하나(앰버) · 끝내기(라벨) · 휴식 칩 */}
         <View style={styles.controls}>
           <Button size="lg" onPress={toggleTimer} style={styles.mainButton}>
-            {isRunning ? (
+            {onBreak ? (
+              <Play size={20} color={T.primaryFg} fill={T.primaryFg} />
+            ) : isRunning ? (
               <Pause size={20} color={T.primaryFg} />
             ) : (
               <Play size={20} color={T.primaryFg} fill={T.primaryFg} />
             )}
-            <Text style={styles.mainButtonText}>{isRunning ? 'Pause' : 'Start'}</Text>
+            <Text style={styles.mainButtonText}>
+              {onBreak ? 'End break' : isRunning ? 'Pause' : 'Start'}
+            </Text>
           </Button>
-          <Button
-            size="lg"
-            variant="soft"
-            onPress={handleFinish}
-            disabled={!onBreak && (elapsedMs === 0 || isFinishing)}
-            accessibilityLabel="Finish session and save it"
-            style={styles.iconButton}
-          >
-            <Check size={20} color={T.primaryDeep} />
-          </Button>
+          {/* 끝내기 — 아이콘만으로는 Resign 과 구분이 안 돼서 라벨을 붙인다.
+              대전에서는 지금까지의 집중 포인트로 판정한다. 리셋 버튼은 대전 중 위험한 동작이라 뺐다. */}
           <Button
             size="lg"
             variant="outline"
-            onPress={reset}
-            accessibilityLabel="Reset timer"
-            style={styles.iconButton}
+            onPress={handleFinish}
+            disabled={!onBreak && (elapsedMs === 0 || isFinishing)}
+            accessibilityLabel={inBattle ? 'Finish now and judge the match by focus points' : 'Finish and save'}
+            style={styles.finishButton}
           >
-            <RotateCcw size={20} color={T.inkSoft} />
+            <View style={styles.finishInner}>
+              <Check size={18} color={T.inkSoft} />
+              <Text style={styles.finishText}>Finish</Text>
+            </View>
           </Button>
         </View>
 
-        {onResign && (
-          <Button
-            block
-            variant="ghost"
-            onPress={handleResign}
-            accessibilityLabel="Resign the match"
-            style={styles.resignButton}
+        <View style={styles.underRow}>
+          {/* 휴식은 칩 하나. 쌓였을 때만 눌러서 쓸 시간을 고른다. */}
+          <Pressable
+            onPress={() => breakBank > 0 && setBreakSheet(true)}
+            disabled={breakBank <= 0}
+            accessibilityRole="button"
+            accessibilityLabel={`Break bank, ${formatMinutes(breakBank)}`}
+            style={[styles.breakChip, breakBank <= 0 && styles.breakChipEmpty]}
           >
-            <Flag size={16} color={T.danger} />
-            <Text style={styles.resignText}>Resign</Text>
-          </Button>
-        )}
+            <Coffee size={14} color={breakBank > 0 ? T.accentDeep : T.muted} strokeWidth={2.2} />
+            <Text style={[styles.breakChipText, breakBank > 0 && styles.breakChipTextOn]}>
+              Break {formatMinutes(breakBank)}
+            </Text>
+          </Pressable>
 
-        {/* 브레이크 뱅크 */}
-        <Card level={1} style={styles.bankWrap} boxStyle={styles.bankCard}>
-          <View style={styles.bankHeader}>
-            <Text style={styles.bankTitle}>Short break bank</Text>
-            <Text style={styles.bankValue}>{breakBank} min</Text>
-          </View>
-          <Text style={styles.bankDesc}>
-            1 hour of focus adds 5 minutes. Rest you roll in the book waits here too.
-          </Text>
-          {rolledBreak > 0 && (
-            <Text style={styles.bankDesc}>{rolledBreak} min from the book, kept between matches.</Text>
+          {onResign && (
+            <Pressable
+              onPress={handleResign}
+              accessibilityRole="button"
+              accessibilityLabel="Resign the match"
+              hitSlop={8}
+              style={styles.resignLink}
+            >
+              <Flag size={14} color={T.danger} />
+              <Text style={styles.resignText}>Resign</Text>
+            </Pressable>
           )}
-          <View style={styles.bankButtons}>
-            {/* ROLL 휴식은 8분·14분처럼 떨어지니, 남은 걸 한 번에 다 쓰는 버튼도 둔다. */}
-            {[5, 10, 15, ...(breakBank > 0 && ![5, 10, 15].includes(breakBank) ? [breakBank] : [])].map((minutes) => (
-              <Button
-                key={minutes}
-                variant="outline"
-                size="sm"
-                disabled={breakBank < minutes}
-                onPress={() => useBreak(minutes)}
-                style={styles.bankButton}
-              >
-                Use {minutes}m
-              </Button>
-            ))}
-          </View>
-          <Text style={[styles.bankStatus, streakBroken && { color: T.danger }]}>
-            {streakBroken ? 'Session record broken — no break was banked.' : breakLabel}
-          </Text>
-        </Card>
+        </View>
+
+        {streakBroken ? (
+          <Text style={styles.streakNote}>Session record broken — no break was banked.</Text>
+        ) : null}
       </View>
+
+      {/* 휴식 시트 — 쌓인 휴식에서 쓸 만큼 고른다. */}
+      <Modal visible={breakSheet} transparent animationType="slide" onRequestClose={() => setBreakSheet(false)}>
+        <Pressable style={styles.sheetBackdrop} onPress={() => setBreakSheet(false)} />
+        <View style={styles.sheet}>
+          <View style={styles.sheetGrip} />
+          <Text style={styles.sheetTitle}>Take a break</Text>
+          <Text style={styles.sheetBody}>
+            {formatMinutes(breakBank)} banked. An hour of focus adds 5 minutes
+            {rolledBreak > 0 ? `; ${rolledBreak} min came from the book` : ''}.
+          </Text>
+          <View style={styles.sheetButtons}>
+            {/* ROLL 휴식은 8분·14분처럼 떨어지니, 남은 걸 한 번에 다 쓰는 버튼도 둔다. */}
+            {[5, 10, 15, ...(breakBank > 0 && ![5, 10, 15].includes(breakBank) ? [breakBank] : [])]
+              .filter((m) => m <= breakBank)
+              .map((minutes) => (
+                <Button
+                  key={minutes}
+                  variant="outline"
+                  onPress={() => {
+                    setBreakSheet(false);
+                    useBreak(minutes);
+                  }}
+                  style={styles.sheetButton}
+                >
+                  {`${minutes} min`}
+                </Button>
+              ))}
+          </View>
+        </View>
+      </Modal>
 
       <ConfirmDialog
         visible={confirmResign}
@@ -1021,6 +1073,18 @@ const styles = StyleSheet.create({
   },
   weeklyValue: { fontFamily: T.fontDisplay, fontSize: 19, color: T.ink, marginTop: 2 },
 
+  // 상단 대결 바
+  duel: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 8 },
+  duelSide: { flex: 1, minWidth: 0 },
+  duelRight: { alignItems: 'flex-end' },
+  duelName: { fontFamily: T.fontMedium, fontSize: 15, color: T.ink },
+  duelTime: { fontFamily: TIMER_FONT, fontSize: 15, color: T.inkSoft, marginTop: 1 },
+  duelVs: { fontFamily: T.fontDisplay, fontSize: 15, color: T.muted, paddingHorizontal: 2 },
+  matchLine: { fontFamily: T.font, fontSize: 13, color: T.muted, marginTop: 2 },
+
+  fpRow: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  fpHelp: { fontFamily: T.font, fontSize: 13, lineHeight: 19, color: T.muted, marginTop: 8 },
+
   truthBar: {
     flexDirection: 'row',
     alignItems: 'stretch',
@@ -1040,7 +1104,7 @@ const styles = StyleSheet.create({
   truthValue: { fontFamily: T.fontDisplay, fontSize: 22, color: T.ink },
   truthNote: { fontFamily: T.font, fontSize: 12, color: T.muted },
 
-  dialWrap: { alignSelf: 'center', marginTop: 22 },
+  dialWrap: { alignSelf: 'center', marginTop: 16, marginBottom: 14 },
   dial: {
     width: DIAL_SIZE,
     height: DIAL_SIZE,
@@ -1089,7 +1153,7 @@ const styles = StyleSheet.create({
     includeFontPadding: false,
   },
   coinRow: { flexDirection: 'row', alignItems: 'center', gap: 5 },
-  coinText: { fontFamily: T.fontMedium, fontSize: 15, color: DIAL.amber, letterSpacing: 0.3 },
+  coinText: { fontFamily: T.fontMedium, fontSize: 15, color: DIAL.coin, letterSpacing: 0.3 },
   pausedText: {
     fontFamily: T.fontMedium,
     fontSize: 14,
@@ -1107,13 +1171,49 @@ const styles = StyleSheet.create({
   },
   hourValue: { fontFamily: T.fontMedium, fontSize: 14, color: T.inkSoft },
 
-  controls: { flexDirection: 'row', gap: 10, marginTop: 20 },
+  controls: { flexDirection: 'row', gap: 10, marginTop: 16 },
+  finishButton: { paddingHorizontal: 16 },
+  finishInner: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  finishText: { fontFamily: T.fontMedium, fontSize: 16, color: T.inkSoft },
+
+  underRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 12 },
+  breakChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: RADIUS.full,
+    backgroundColor: T.accentSoft,
+  },
+  breakChipEmpty: { backgroundColor: T.bgSunk },
+  breakChipText: { fontFamily: T.fontMedium, fontSize: 14, color: T.muted },
+  breakChipTextOn: { color: T.accentDeep },
+  resignLink: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingVertical: 8, paddingHorizontal: 4 },
+  streakNote: { fontFamily: T.font, fontSize: 13, color: T.danger, marginTop: 10 },
+
+  // 휴식 시트
+  sheetBackdrop: { flex: 1, backgroundColor: 'rgba(34,38,28,0.4)' },
+  sheet: {
+    backgroundColor: T.card,
+    borderTopLeftRadius: RADIUS.xl,
+    borderTopRightRadius: RADIUS.xl,
+    paddingHorizontal: 20,
+    paddingTop: 10,
+    paddingBottom: 34,
+    gap: 12,
+  },
+  sheetGrip: { alignSelf: 'center', width: 40, height: 4, borderRadius: 2, backgroundColor: T.border },
+  sheetTitle: { fontFamily: T.fontDisplay, fontSize: 22, color: T.ink },
+  sheetBody: { fontFamily: T.font, fontSize: 15, lineHeight: 22, color: T.muted },
+  sheetButtons: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
+  sheetButton: { flexGrow: 1 },
   mainButton: { flex: 1, alignSelf: 'stretch' },
   mainButtonText: { fontFamily: T.fontMedium, fontSize: 19, color: T.primaryFg },
   iconButton: { width: 60, paddingHorizontal: 0 },
 
   resignButton: { marginTop: 10 },
-  resignText: { fontFamily: T.fontMedium, fontSize: 17, color: T.danger },
+  resignText: { fontFamily: T.fontMedium, fontSize: 15, color: T.danger },
 
   bankWrap: { marginTop: 20, marginBottom: 16 },
   bankCard: { padding: 18 },
