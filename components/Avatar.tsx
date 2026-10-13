@@ -1,7 +1,9 @@
 import React, { useRef } from 'react';
-import { Image, PanResponder, StyleSheet, Text, View } from 'react-native';
+import { Image, PanResponder, StyleSheet, View } from 'react-native';
 import { ABS_FILL, elevation, T } from '@/components/nova';
 import { clamp01, isImageAvatar, type Profile, type Sticker } from '@/lib/profile';
+import { AvatarMark } from './AvatarMark';
+import { StickerMark } from './StickerMark';
 
 /** Sticker box as a fraction of the picture. */
 const STICKER_RATIO = 0.28;
@@ -12,16 +14,12 @@ const BORDER = 2;
 export type StickerDrag = {
   onMove: (index: number, x: number, y: number) => void;
   onStart?: () => void;
-  /**
-   * Fired for taps too. `moved` separates a real drag (keep it) from a tap
-   * (usually a delete), so the caller can tell one undo step from the other.
-   */
-  onEnd?: (index: number, moved: boolean) => void;
+  onEnd?: () => void;
   /** A tap that never moved — used to remove the sticker. */
   onTap?: (index: number) => void;
 };
 
-/** Fixed-size box centring the glyph: emoji metrics differ per platform, box size doesn't. */
+/** Fixed-size box keeps the SVG sticker aligned as the avatar changes size. */
 function StickerView({
   sticker,
   size,
@@ -41,7 +39,7 @@ function StickerView({
         { width: size, height: size, left: sticker.x * range, top: sticker.y * range },
       ]}
     >
-      <Text style={{ fontSize: size * 0.8 }}>{sticker.glyph}</Text>
+      <StickerMark glyph={sticker.glyph} size={size * 0.82} />
     </View>
   );
 }
@@ -85,12 +83,10 @@ function DraggableSticker({
         );
       },
       onPanResponderRelease: () => {
-        const { index } = live.current;
-        if (!start.current.moved) live.current.drag.onTap?.(index);
-        live.current.drag.onEnd?.(index, start.current.moved);
+        if (!start.current.moved) live.current.drag.onTap?.(live.current.index);
+        live.current.drag.onEnd?.();
       },
-      onPanResponderTerminate: () =>
-        live.current.drag.onEnd?.(live.current.index, start.current.moved),
+      onPanResponderTerminate: () => live.current.drag.onEnd?.(),
     })
   ).current;
 
@@ -112,7 +108,6 @@ export function Avatar({
   /** Supply to make the stickers draggable; omit for a static picture. */
   drag?: StickerDrag;
 }) {
-  const initials = (profile?.name.trim() || 'Guest').slice(0, 2).toUpperCase();
   // the sticker layer is the box INSIDE the border, so the border comes off first —
   // measuring against the full size pushed every sticker past the edge, and by a
   // bigger fraction the smaller the avatar got.
@@ -140,12 +135,8 @@ export function Avatar({
     >
       {isImageAvatar(profile?.avatar) ? (
         <Image source={{ uri: profile!.avatar }} style={styles.image} />
-      ) : profile?.avatar ? (
-        <Text style={{ fontSize: size * 0.5 }}>{profile.avatar}</Text>
       ) : (
-        <Text style={{ fontFamily: T.fontBold, fontSize: size * 0.34, color: T.primaryDeep }}>
-          {initials}
-        </Text>
+        <AvatarMark avatar={profile?.avatar} size={size * 0.82} />
       )}
       <View pointerEvents={drag ? 'box-none' : 'none'} style={styles.layer}>
         {profile?.stickers?.map((sticker, index) =>

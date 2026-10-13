@@ -1,6 +1,6 @@
 import React from 'react';
 import { Modal, StyleSheet, Text, View } from 'react-native';
-import { Button, Card, RADIUS, T } from './nova';
+import { Button, ButtonText, Card, RADIUS, T } from './nova';
 
 type ConfirmProps = {
   visible: boolean;
@@ -36,7 +36,7 @@ export default function ConfirmDialog({
               accessibilityLabel={cancelLabel}
               style={styles.buttonSlot}
             >
-              {cancelLabel}
+              <ButtonText style={styles.cancelLabel}>{cancelLabel}</ButtonText>
             </Button>
             <Button
               variant="danger"
@@ -67,4 +67,5 @@ const styles = StyleSheet.create({
   message: { fontFamily: T.font, fontSize: 16, color: T.muted, lineHeight: 21, marginTop: 8 },
   buttons: { flexDirection: 'row', gap: 10, marginTop: 22 },
   buttonSlot: { flex: 1, alignSelf: 'stretch' },
+  cancelLabel: { flex: 1, textAlign: 'center' },
 });

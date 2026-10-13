@@ -1,6 +1,16 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { StyleSheet, Text, View } from 'react-native'
-import Svg, { G, Line, Polygon, Text as SvgText } from 'react-native-svg'
+import Svg, {
+  Circle,
+  Defs,
+  G,
+  Line,
+  LinearGradient,
+  Path,
+  Polygon,
+  Stop,
+  Text as SvgText,
+} from 'react-native-svg'
 import { Button, RADIUS, T } from '@/components/nova'
 import { QUOTES } from '@/components/quotes'
 import { arenaById, type Arena } from '@/lib/arena'
@@ -61,8 +71,8 @@ const SHELF_LIFT = -10     // 마우스가 올라간 책이 위로 빠져나오�
 type VBox = { x: number; y: number; w: number; h: number }
 type Book = { row: number; x0: number; w: number; h: number; y: number; c: string }
 type Shelf = { L: number; R: number; T: number; B: number; boards: number[]; books: Book[] }
-// 종이 · 크림 · 옅은 잎 세 톤만. 고른 책(앰버)이 책장에서 혼자 튀어 보이게.
-const BOOK_COLORS = [T.card, T.cardAlt, T.accentSoft]
+// Muted leather colors keep the selected amber book easy to spot.
+const BOOK_COLORS = ['#557465', '#B97755', '#637D9A', '#B29458', '#8A7294', '#A65F58']
 
 // 꽂힌 책들. 높이와 색을 고정 씨앗으로 흩뿌려 단마다 왼쪽부터 채운다. 책등 너비는 3D 책의
 // 두께 비율(BLOCK/H)로 맞춘다. 그래야 뽑힌 책이 상자로 바뀌어도 책등 폭이 그대로다.
@@ -199,6 +209,42 @@ function boxPt(x: number, y: number, z: number, v: BoxView): Pt {
   const r = (v.phi * Math.PI) / 180
   const p = project(x * Math.cos(r) + z * Math.sin(r), y, -x * Math.sin(r) + z * Math.cos(r), v.tilt, v.panX)
   return { x: p.x * v.s + v.off.x, y: p.y * v.s + v.off.y }
+}
+
+function roundedBoxFace(
+  view: BoxView,
+  z: number,
+  x0 = 0,
+  y0 = -H / 2,
+  x1 = W,
+  y1 = H / 2,
+  radius = 12,
+): string {
+  const r = Math.min(radius, (x1 - x0) / 2, (y1 - y0) / 2)
+  const corners: Array<[number, number, number]> = [
+    [x1 - r, y0, z], [x1, y0, z], [x1, y0 + r, z],
+    [x1, y1 - r, z], [x1, y1, z], [x1 - r, y1, z],
+    [x0 + r, y1, z], [x0, y1, z], [x0, y1 - r, z],
+    [x0, y0 + r, z], [x0, y0, z], [x0 + r, y0, z],
+  ]
+  const point = ([x, y, depth]: [number, number, number]) => boxPt(x, y, depth, view)
+  const start = point(corners[0])
+  let d = `M${start.x.toFixed(1)},${start.y.toFixed(1)}`
+
+  for (let i = 0; i < corners.length; i += 3) {
+    const [from, control, to] = corners.slice(i, i + 3)
+    for (let step = 1; step <= 8; step += 1) {
+      const t = step / 8
+      const u = 1 - t
+      const p = point([
+        u * u * from[0] + 2 * u * t * control[0] + t * t * to[0],
+        u * u * from[1] + 2 * u * t * control[1] + t * t * to[1],
+        z,
+      ])
+      d += `L${p.x.toFixed(1)},${p.y.toFixed(1)}`
+    }
+  }
+  return `${d}Z`
 }
 
 // 여섯 면. 바깥쪽 법선으로 앞뒤를 가려 보이는 면만 그린다.
@@ -826,60 +872,306 @@ export default function PageRoll({
       s: lerp(pulled.s, LANDED_VIEW.s, lay),
       off: lerpPt(pulled.off, LANDED_VIEW.off, lay),
     }
-    const boxFill = lit ? T.primary : b.c
+    const boxFill = b.c
+    const foil = '#E9CF93'
+    const bookPoint = ([x, y, z]: [number, number, number]) => boxPt(x, y, z, view)
+    const bookPolygon = (points: Array<[number, number, number]>) => fmt(points.map(bookPoint))
+    const coverDetails = (z: number) => {
+      const left = 22
+      const right = W - 22
+      const top = -H / 2 + 24
+      const bottom = H / 2 - 24
+      const centerY = 0
+      const diamond = [
+        [W / 2, centerY - 34, z],
+        [W / 2 + 25, centerY, z],
+        [W / 2, centerY + 34, z],
+        [W / 2 - 25, centerY, z],
+      ] as Array<[number, number, number]>
+      const motif = slot % 3
+      return (
+        <G>
+          <Path
+            d={roundedBoxFace(view, z, left, top, right, bottom, 9)}
+            fill="none"
+            stroke={foil}
+            strokeWidth={2.5}
+            opacity={0.95}
+          />
+          <Path
+            d={roundedBoxFace(view, z, left + 7, top + 7, right - 7, bottom - 7, 6)}
+            fill="none"
+            stroke={foil}
+            strokeWidth={1}
+            opacity={0.55}
+          />
+          {[top + 16, top + 22, bottom - 22, bottom - 16].map((y, index) => (
+            <Line
+              key={index}
+              x1={bookPoint([W * 0.3, y, z]).x}
+              y1={bookPoint([W * 0.3, y, z]).y}
+              x2={bookPoint([W * 0.7, y, z]).x}
+              y2={bookPoint([W * 0.7, y, z]).y}
+              stroke={foil}
+              strokeWidth={index % 2 === 0 ? 2 : 1}
+              opacity={0.8}
+            />
+          ))}
+          {motif === 0 ? (
+            <>
+              <Polygon points={bookPolygon(diamond)} fill="none" stroke={foil} strokeWidth={3} />
+              <Polygon
+                points={bookPolygon([
+                  [W / 2, centerY - 17, z],
+                  [W / 2 + 12, centerY, z],
+                  [W / 2, centerY + 17, z],
+                  [W / 2 - 12, centerY, z],
+                ])}
+                fill={foil}
+                opacity={0.82}
+              />
+            </>
+          ) : motif === 1 ? (
+            <>
+              <Circle
+                cx={bookPoint([W / 2, centerY, z]).x}
+                cy={bookPoint([W / 2, centerY, z]).y}
+                r={28 * view.s}
+                fill="none"
+                stroke={foil}
+                strokeWidth={3}
+              />
+              <Line
+                x1={bookPoint([W / 2 - 13, centerY, z]).x}
+                y1={bookPoint([W / 2 - 13, centerY, z]).y}
+                x2={bookPoint([W / 2 + 13, centerY, z]).x}
+                y2={bookPoint([W / 2 + 13, centerY, z]).y}
+                stroke={foil}
+                strokeWidth={4}
+                strokeLinecap="round"
+              />
+              <Line
+                x1={bookPoint([W / 2, centerY - 13, z]).x}
+                y1={bookPoint([W / 2, centerY - 13, z]).y}
+                x2={bookPoint([W / 2, centerY + 13, z]).x}
+                y2={bookPoint([W / 2, centerY + 13, z]).y}
+                stroke={foil}
+                strokeWidth={4}
+                strokeLinecap="round"
+              />
+            </>
+          ) : (
+            <>
+              <Polygon
+                points={bookPolygon([
+                  [W / 2, centerY - 35, z],
+                  [W / 2 + 23, centerY + 28, z],
+                  [W / 2, centerY + 12, z],
+                  [W / 2 - 23, centerY + 28, z],
+                ])}
+                fill="none"
+                stroke={foil}
+                strokeWidth={3}
+                strokeLinejoin="round"
+              />
+              <Line
+                x1={bookPoint([W / 2 - 13, centerY + 6, z]).x}
+                y1={bookPoint([W / 2 - 13, centerY + 6, z]).y}
+                x2={bookPoint([W / 2 + 13, centerY + 6, z]).x}
+                y2={bookPoint([W / 2 + 13, centerY + 6, z]).y}
+                stroke={foil}
+                strokeWidth={2}
+              />
+            </>
+          )}
+        </G>
+      )
+    }
 
     return (
       <G>
         {/* 책장. 책이 돌아누우면서 같이 사라진다. */}
         <G opacity={1 - morph}>
+          <Defs>
+            <LinearGradient id="rollShelfBack" x1="0" y1="0" x2="1" y2="1">
+              <Stop offset="0" stopColor="#493629" />
+              <Stop offset="0.48" stopColor="#684A32" />
+              <Stop offset="1" stopColor="#392D25" />
+            </LinearGradient>
+            <LinearGradient id="rollShelfWood" x1="0" y1="0" x2="0" y2="1">
+              <Stop offset="0" stopColor="#A47A50" />
+              <Stop offset="0.18" stopColor="#765336" />
+              <Stop offset="1" stopColor="#503A2A" />
+            </LinearGradient>
+            <LinearGradient id="rollShelfPost" x1="0" y1="0" x2="1" y2="0">
+              <Stop offset="0" stopColor="#493629" />
+              <Stop offset="0.28" stopColor="#806044" />
+              <Stop offset="0.72" stopColor="#684A32" />
+              <Stop offset="1" stopColor="#3F3025" />
+            </LinearGradient>
+          </Defs>
           <Polygon points={fmt([
             { x: shelf.L, y: shelf.T }, { x: shelf.R, y: shelf.T }, { x: shelf.R, y: shelf.B }, { x: shelf.L, y: shelf.B },
-          ])} fill={T.ink} opacity={0.09} />
+          ])} fill="url(#rollShelfBack)" stroke="#38291F" strokeWidth={3} strokeLinejoin="round" />
+          <Polygon points={fmt([
+            { x: shelf.L + BOARD, y: shelf.T + BOARD },
+            { x: shelf.R - BOARD, y: shelf.T + BOARD },
+            { x: shelf.R - BOARD, y: shelf.B - BOARD },
+            { x: shelf.L + BOARD, y: shelf.B - BOARD },
+          ])} fill="#302921" opacity={0.2} />
+          <Line x1={shelf.L + BOARD + 2} y1={shelf.T + BOARD} x2={shelf.L + BOARD + 2} y2={shelf.B - BOARD}
+            stroke="#D8B68B" strokeWidth={2} opacity={0.22} />
+          <Line x1={shelf.R - BOARD - 2} y1={shelf.T + BOARD} x2={shelf.R - BOARD - 2} y2={shelf.B - BOARD}
+            stroke="#D8B68B" strokeWidth={2} opacity={0.18} />
           {shelf.books.map((bk, i) => {
             if (i === slot) return null
             const bx = bk.x0
             // 마우스가 올라간 책은 살짝 빠져나와 있다. 누르면 그 책이 뽑힌다.
             const by = bk.y + (f < 0 && shelfHover === i ? SHELF_LIFT : 0)
+            const inset = Math.max(3, bk.w * 0.16)
+            const center = bx + bk.w / 2
+            const foil = '#E9CF93'
+            const motif = i % 3
             return (
               <G key={'bk' + i} onPress={() => pullFrom(i)}>
-                <Polygon points={fmt([
-                  { x: bx, y: by - bk.h }, { x: bx + bk.w, y: by - bk.h },
-                  { x: bx + bk.w, y: by }, { x: bx, y: by },
-                ])} fill={bk.c} stroke={T.borderStrong} strokeWidth={2} strokeLinejoin="round" />
-                {/* 책등의 띠 두 줄 */}
-                {[0.18, 0.3].map((v) => (
-                  <Line key={v} x1={bx + 6} y1={by - bk.h * (1 - v)} x2={bx + bk.w - 6} y2={by - bk.h * (1 - v)}
-                    stroke={T.borderStrong} strokeWidth={2} opacity={0.6} />
-                ))}
+              <Polygon points={fmt([
+                { x: bx, y: by - bk.h }, { x: bx + bk.w, y: by - bk.h },
+                { x: bx + bk.w, y: by }, { x: bx, y: by },
+              ])} fill={bk.c} stroke="#342B25" strokeWidth={2} strokeLinejoin="round" />
+              <Line x1={bx + 2} y1={by - bk.h + 4} x2={bx + 2} y2={by - 4}
+                stroke="#FFF3D5" strokeWidth={1.5} opacity={0.45} />
+              <Line x1={bx + bk.w - 2} y1={by - bk.h + 3} x2={bx + bk.w - 2} y2={by - 3}
+                stroke="#32271F" strokeWidth={2} opacity={0.35} />
+              {[0.13, 0.2, 0.8, 0.87].map((v) => (
+                <Line key={v} x1={bx + inset} y1={by - bk.h * (1 - v)}
+                  x2={bx + bk.w - inset} y2={by - bk.h * (1 - v)}
+                  stroke={foil} strokeWidth={1.5} opacity={v === 0.2 || v === 0.8 ? 0.8 : 0.45} />
+              ))}
+              {motif === 0 ? (
+                <G>
+                  <Circle cx={center} cy={by - bk.h * 0.5} r={Math.max(3, bk.w * 0.13)}
+                    fill="none" stroke={foil} strokeWidth={1.4} opacity={0.9} />
+                  <Circle cx={center} cy={by - bk.h * 0.5} r={Math.max(1.2, bk.w * 0.045)}
+                    fill={foil} opacity={0.9} />
+                </G>
+              ) : motif === 1 ? (
+                <G>
+                  <Line x1={center} y1={by - bk.h * 0.64} x2={center} y2={by - bk.h * 0.36}
+                    stroke={foil} strokeWidth={1.4} opacity={0.9} />
+                  <Line x1={center - bk.w * 0.2} y1={by - bk.h * 0.5}
+                    x2={center + bk.w * 0.2} y2={by - bk.h * 0.5}
+                    stroke={foil} strokeWidth={1.4} opacity={0.9} />
+                  <Circle cx={center} cy={by - bk.h * 0.5} r={Math.max(2, bk.w * 0.08)}
+                    fill="none" stroke={foil} strokeWidth={1} />
+                </G>
+              ) : (
+                <G>
+                  <Polygon points={fmt([
+                    { x: center, y: by - bk.h * 0.62 },
+                    { x: center + bk.w * 0.19, y: by - bk.h * 0.5 },
+                    { x: center, y: by - bk.h * 0.38 },
+                    { x: center - bk.w * 0.19, y: by - bk.h * 0.5 },
+                  ])} fill="none" stroke={foil} strokeWidth={1.3} strokeLinejoin="round" />
+                  <Circle cx={center} cy={by - bk.h * 0.5} r={Math.max(1.4, bk.w * 0.05)}
+                    fill={foil} />
+                </G>
+              )}
+              <Line x1={bx + inset} y1={by - bk.h * 0.26} x2={bx + bk.w - inset}
+                y2={by - bk.h * 0.26} stroke={foil} strokeWidth={1} opacity={0.55} />
+              <Line x1={bx + inset} y1={by - bk.h * 0.23} x2={bx + bk.w - inset}
+                y2={by - bk.h * 0.23} stroke={foil} strokeWidth={1} opacity={0.35} />
               </G>
             )
           })}
           {shelf.boards.map((y) => (
-            <Polygon key={'board' + y} points={fmt([
+            <G key={'board' + y}>
+              <Polygon points={fmt([
               { x: shelf.L, y }, { x: shelf.R, y }, { x: shelf.R, y: y + BOARD }, { x: shelf.L, y: y + BOARD },
-            ])} fill={T.accentDeep} stroke={T.accentDeep} strokeWidth={2} strokeLinejoin="round" />
+              ])} fill="url(#rollShelfWood)" stroke="#38291F" strokeWidth={2} strokeLinejoin="round" />
+              <Line x1={shelf.L + 3} y1={y + 2} x2={shelf.R - 3} y2={y + 2}
+              stroke="#E4C397" strokeWidth={2} opacity={0.7} />
+              <Line x1={shelf.L + 4} y1={y + BOARD - 2} x2={shelf.R - 4} y2={y + BOARD - 2}
+              stroke="#33271F" strokeWidth={2} opacity={0.45} />
+              {[shelf.L + 8, shelf.R - 8].map((x) => (
+              <Circle key={x} cx={x} cy={y + BOARD / 2} r={1.7} fill="#D6B27E" opacity={0.8} />
+              ))}
+            </G>
           ))}
           {[shelf.L, shelf.R - BOARD].map((x) => (
             <Polygon key={'post' + x} points={fmt([
               { x, y: shelf.T }, { x: x + BOARD, y: shelf.T }, { x: x + BOARD, y: shelf.B }, { x, y: shelf.B },
-            ])} fill={T.accentDeep} stroke={T.accentDeep} strokeWidth={2} strokeLinejoin="round" />
+            ])} fill="url(#rollShelfPost)" stroke="#38291F" strokeWidth={2} strokeLinejoin="round" />
           ))}
+          <Line x1={shelf.L + 4} y1={shelf.T + 3} x2={shelf.L + 4} y2={shelf.B - 3}
+            stroke="#E4C397" strokeWidth={2} opacity={0.5} />
+          <Line x1={shelf.R - 4} y1={shelf.T + 3} x2={shelf.R - 4} y2={shelf.B - 3}
+            stroke="#30251E" strokeWidth={2} opacity={0.55} />
         </G>
 
         {/* 골라진 책. 깜빡이며 고른 뒤 앞으로 뽑혀 나와, 책등을 축으로 돌고 눕는다. */}
         <G onPress={() => pullFrom(slot)}>
-          {BOX_FACES.filter((fc) => faceVisible(fc.n, view)).map((fc, i) => (
-            <Polygon key={'face' + i} points={fmt(fc.pts.map(([x, y, z]) => boxPt(x, y, z, view)))}
-              fill={fc.paper ? T.card : boxFill} stroke={T.borderStrong} strokeWidth={2}
-              strokeLinejoin="round" />
-          ))}
-          {/* 책등의 띠. 책등 면(x=0) 위 z 방향으로 긋는다. 돌아누우면서 함께 접힌다. */}
-          {faceVisible([-1, 0, 0], view) && [0.18, 0.3].map((v) => {
-            const y = -H / 2 + H * v
-            const a = boxPt(0, y, -BLOCK * 0.18, view)
-            const c = boxPt(0, y, -BLOCK * 0.82, view)
-            return <Line key={v} x1={a.x} y1={a.y} x2={c.x} y2={c.y} stroke={T.borderStrong} strokeWidth={2} opacity={0.6} />
+          {BOX_FACES.filter((fc) => faceVisible(fc.n, view)).map((fc, i) => {
+            const isCoverFace = fc.n[0] === 0 && fc.n[1] === 0
+            if (isCoverFace) {
+              const z = fc.n[2] > 0 ? 0 : -BLOCK
+              return (
+                <Path
+                  key={'face' + i}
+                  d={roundedBoxFace(view, z)}
+                  fill={boxFill}
+                  stroke={T.borderStrong}
+                  strokeWidth={2}
+                  strokeLinejoin="round"
+                />
+              )
+            }
+            return (
+              <Polygon key={'face' + i} points={fmt(fc.pts.map(([x, y, z]) => boxPt(x, y, z, view)))}
+                fill={fc.paper ? T.card : boxFill} stroke={T.borderStrong} strokeWidth={2}
+                strokeLinejoin="round" />
+            )
           })}
+          {lit && faceVisible([0, 0, 1], view) ? (
+            <Path
+              d={roundedBoxFace(view, 0)}
+              fill={T.primary}
+              opacity={0.2}
+            />
+          ) : null}
+          {faceVisible([0, 0, 1], view) ? coverDetails(0) : null}
+          {faceVisible([0, 0, -1], view) ? coverDetails(-BLOCK) : null}
+          {faceVisible([-1, 0, 0], view) ? (
+            <G>
+              {[0.1, 0.14, 0.86, 0.9].map((v) => {
+                const y = -H / 2 + H * v
+                const a = bookPoint([0, y, -BLOCK * 0.08])
+                const c = bookPoint([0, y, -BLOCK * 0.92])
+                return (
+                  <Line key={v} x1={a.x} y1={a.y} x2={c.x} y2={c.y}
+                    stroke={foil} strokeWidth={v === 0.1 || v === 0.9 ? 2.5 : 1.5} opacity={0.9} />
+                )
+              })}
+              {[0.34, 0.42, 0.58, 0.66].map((v) => {
+                const y = -H / 2 + H * v
+                const a = bookPoint([0, y, -BLOCK * 0.28])
+                const c = bookPoint([0, y, -BLOCK * 0.72])
+                return <Line key={v} x1={a.x} y1={a.y} x2={c.x} y2={c.y}
+                  stroke={foil} strokeWidth={1.5} opacity={0.7} />
+              })}
+              <Polygon
+                points={bookPolygon([
+                  [0, -18, -BLOCK * 0.5],
+                  [0, 0, -BLOCK * 0.3],
+                  [0, 18, -BLOCK * 0.5],
+                  [0, 0, -BLOCK * 0.7],
+                ])}
+                fill="none"
+                stroke={foil}
+                strokeWidth={2}
+                strokeLinejoin="round"
+              />
+            </G>
+          ) : null}
         </G>
       </G>
     )

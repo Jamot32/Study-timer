@@ -2,8 +2,10 @@ import React from 'react';
 import { ScrollView, StyleSheet, Text, View } from 'react-native';
 import { Trophy } from 'lucide-react-native';
 import { Card, RADIUS, SEMANTIC, T } from './nova';
-import { useInventory } from '../lib/inventory';
 import { type Profile } from '../lib/profile';
+import { useInventory } from '../lib/inventory';
+import { Avatar } from './Avatar';
+import { AvatarMark } from './AvatarMark';
 
 // 순위는 ELO 로 매긴다 — 배틀 화면의 트로피 숫자와 같은 값, 같은 아이콘, 같은 색.
 // 상대들은 아직 서버가 없어 고정값이다.
@@ -46,7 +48,11 @@ export default function RankBoard({ profile }: { profile?: Profile }) {
             <View style={styles.place}>
               <Text style={styles.placeText}>{index + 1}</Text>
             </View>
-            <Text style={styles.avatar}>{row.avatar}</Text>
+            {me ? (
+              <Avatar profile={profile} size={40} shadow={0} background={T.bgSunk} />
+            ) : (
+              <AvatarMark avatar={row.avatar} size={36} />
+            )}
             <Text style={[styles.name, me && styles.nameMe]} numberOfLines={1}>
               {row.name}
             </Text>
@@ -79,7 +85,6 @@ const styles = StyleSheet.create({
     backgroundColor: T.bgSunk,
   },
   placeText: { fontFamily: T.fontMedium, color: T.muted, fontSize: 14 },
-  avatar: { fontSize: 27 },
   name: { flex: 1, fontFamily: T.fontMedium, color: T.ink, fontSize: 17 },
   nameMe: { fontFamily: T.fontBold, color: SEMANTIC.selected.fg },
   elo: { flexDirection: 'row', alignItems: 'baseline', gap: 4 },
