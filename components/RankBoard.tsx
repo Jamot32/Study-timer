@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { ScrollView, StyleSheet, Text, View } from 'react-native';
 import { Trophy } from 'lucide-react-native';
 import { Card, RADIUS, T } from './nova';
-import { loadProfile, type Profile } from '../lib/auth';
+import { loadProfile, type Profile } from '../lib/profile';
 
 const RIVALS = [
   { name: 'Nova Mint', trophies: 2480, avatar: '🦊' },
