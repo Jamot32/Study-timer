@@ -25,7 +25,7 @@ import {
 } from 'lucide-react-native';
 import Svg, { Circle, Ellipse, Path } from 'react-native-svg';
 import { Button, Card, RADIUS, SEMANTIC, T, Tap, elevation } from './nova';
-import { type Profile } from '../lib/auth';
+import { type Profile } from '../lib/profile';
 import { createCpuOpponent, type CpuOpponent } from '../lib/cpuOpponent';
 import {
   arenaById,
@@ -74,6 +74,8 @@ type BattleLobbyProps = {
   onOpenSettings?: () => void;
   /** 앱이 들고 있는 프로필. 편집하면 여기까지 바로 따라온다. */
   profile?: Profile;
+  /** 동기화·정산 뒤 App 이 올린다. 지갑을 다시 읽는다. */
+  refreshKey?: number;
 };
 
 const TIPS = [
@@ -446,6 +448,7 @@ export default function BattleLobby({
   onOpenProfile,
   onOpenSettings,
   profile,
+  refreshKey = 0,
 }: BattleLobbyProps) {
   const [phase, setPhase] = useState<BattlePhase>('lobby');
   const [elapsed, setElapsed] = useState(0);
@@ -455,7 +458,7 @@ export default function BattleLobby({
   const [solo, setSolo] = useState(false);
   const [rival, setRival] = useState<CpuOpponent | null>(null);
   // 지갑·ELO·지금 선 방은 모두 같은 저장소에서 온다.
-  const { inv, refresh } = useInventory();
+  const { inv, refresh } = useInventory(refreshKey);
   const coins = inv.coins;
   const arena = arenaById(inv.arenaId);
   // 오늘 기록에 쌓인 공부. 읽기만 한다.

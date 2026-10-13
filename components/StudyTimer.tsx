@@ -6,7 +6,9 @@ import Svg, { Circle, Defs, LinearGradient as SvgGradient, Stop } from 'react-na
 import { confirmDestructive } from '../lib/confirm'
 import { useStudyTimer } from '../lib/useStudyTimer'
 import { awayOutcome } from '../lib/away'
-import { type Profile } from '../lib/auth'
+import { type Profile } from '../lib/profile'
+import { loadSessions } from '../lib/sessions'
+import { studyStats } from '../lib/progress'
 import { Avatar } from './Avatar'
 import ConfirmDialog from './PixelConfirm'
 import { Button, Card, ProgressBar, RADIUS, T } from './nova'
@@ -348,6 +350,7 @@ export function StudyTimer({
   arena,
   coupons = NO_COUPONS,
   profile,
+  refreshKey = 0,
 }: {
   /** 판이 끝났다. 배틀이었다면 판정에 필요한 값이 실려 온다. */
   onFinished?: (summary?: MatchSummary) => void
@@ -366,6 +369,7 @@ export function StudyTimer({
   coupons?: readonly CouponId[]
   /** Logged-in profile; drives the header avatar, outer line, title and name. */
   profile?: Profile
+  refreshKey?: number
 }) {
   const [mode, setMode] = useState<'FOCUS' | 'SHORT BREAK'>('FOCUS')
   // 이번 판에서 공부로 번 휴식. 판이 끝나면 사라진다.
@@ -381,6 +385,7 @@ export function StudyTimer({
   const [weeklyMax, setWeeklyMax] = useState(0)
   const [breakElapsed, setBreakElapsed] = useState(0)
   const [isFinishing, setIsFinishing] = useState(false)
+  const [level, setLevel] = useState(1)
   const [confirmResign, setConfirmResign] = useState(false)
   // FP 설명 한 줄, 휴식 고르기 시트
   const [fpHelp, setFpHelp] = useState(false)
@@ -411,7 +416,18 @@ export function StudyTimer({
   // 오늘 기록에 쌓인 공부 시간. 매치와 무관하게 흘러간 것까지 전부.
   // 세션이 끝날 때마다 다시 읽는다.
   const [payoutKey, setPayoutKey] = useState(0)
-  const { minutes: studiedTodayMinutes } = useStudiedToday(payoutKey)
+  // 동기화로 다른 기기의 세션이 들어와도 다시 읽는다. 두 키 모두 늘기만 하니 합이 곧 둘 중 하나의 변화다.
+  const { minutes: studiedTodayMinutes } = useStudiedToday(payoutKey + refreshKey)
+
+  useEffect(() => {
+    let cancelled = false
+    loadSessions().then((sessions) => {
+      if (!cancelled) setLevel(studyStats(sessions).level)
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [refreshKey])
 
   // 배틀 중일 때만 상대 시계가 돈다. 3-2-1 카운트다운이 끝나야 비로소 출발한다.
   const inBattle = onResign !== undefined

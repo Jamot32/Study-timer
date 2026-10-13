@@ -337,13 +337,13 @@ function TestBench({ elo, arenaName, onChange }: { elo: number; arenaName: strin
   );
 }
 
-export default function Shop({ bagSignal = 0 }: { bagSignal?: number } = {}) {
+export default function Shop({ bagSignal = 0, refreshKey = 0 }: { bagSignal?: number; refreshKey?: number } = {}) {
   const [pane, setPane] = useState<Pane>('shop');
   // 다른 화면이 '가방에서 보기'를 요청하면 가방을 연다.
   useEffect(() => {
     if (bagSignal > 0) setPane('bag');
   }, [bagSignal]);
-  const { inv, buy, refresh } = useInventory();
+  const { inv, buy, refresh } = useInventory(refreshKey);
   const today = dayKey(new Date());
   const secretOpen = inv.secretShopDay === today;
   // 가방에서 방금 굴린 주사위. 다른 걸 쓰거나 탭을 옮기면 지운다.

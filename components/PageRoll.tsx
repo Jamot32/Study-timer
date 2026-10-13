@@ -471,13 +471,15 @@ function untilMidnight(nowMs: number): string {
 export default function PageRoll({
   onFocusChange,
   onOpenBag,
+  refreshKey = 0,
 }: {
   onFocusChange?: (focused: boolean) => void
   /** 결과 화면에서 '가방에서 보기'를 누르면 상점 탭의 가방으로 간다. */
   onOpenBag?: () => void
+  refreshKey?: number
 } = {}) {
   // 보상 크기의 기준. 지금 서 있는 방을 따른다 — 긴 판을 뛰는 사람이 크게 쉰다.
-  const { inv, refresh } = useInventory()
+  const { inv, refresh } = useInventory(refreshKey)
   const playerRank = arenaById(inv.arenaId)
   // 뽑기권은 하루에 한 장씩 쌓인다. 한 장도 없으면 ROLL 은 내일까지 닫힌다.
   const tickets = rollTicketsNow(inv)

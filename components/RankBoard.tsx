@@ -2,8 +2,8 @@ import React from 'react';
 import { ScrollView, StyleSheet, Text, View } from 'react-native';
 import { Trophy } from 'lucide-react-native';
 import { Card, RADIUS, SEMANTIC, T } from './nova';
-import { type Profile } from '../lib/auth';
 import { useInventory } from '../lib/inventory';
+import { type Profile } from '../lib/profile';
 
 // 순위는 ELO 로 매긴다 — 배틀 화면의 트로피 숫자와 같은 값, 같은 아이콘, 같은 색.
 // 상대들은 아직 서버가 없어 고정값이다.

@@ -4,11 +4,11 @@ import {
   DMSans_500Medium,
   DMSans_700Bold,
 } from '@expo-google-fonts/dm-sans';
-import { Fraunces_400Regular_Italic, Fraunces_600SemiBold } from '@expo-google-fonts/fraunces';
+import { Fraunces_600SemiBold } from '@expo-google-fonts/fraunces';
 import { PressStart2P_400Regular } from '@expo-google-fonts/press-start-2p';
 import { StatusBar } from 'expo-status-bar';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { ScrollView, StyleSheet, View } from 'react-native';
+import { AppState, ScrollView, StyleSheet, View } from 'react-native';
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 import Dashboard from './components/Dashboard';
 import BattleLobby from './components/BattleLobby';
@@ -17,13 +17,17 @@ import RankBoard from './components/RankBoard';
 import StudyTimer from './components/StudyTimer';
 import Settings from './components/Settings';
 import Shop from './components/Shop';
-import ProfileEdit from './components/ProfileEdit';
 import BottomTabs, { type AppTab } from './components/BottomTabs';
 import CountdownOverlay from './components/CountdownOverlay';
+import Loading from './components/Loading';
+import Login from './components/Login';
+import ProfileEdit from './components/ProfileEdit';
+import { clearProfile, loadProfile, saveProfile, type Profile } from './lib/profile';
+import { googleSheetAuth, type AuthSession } from './lib/auth';
+import { resetSyncState, subscribeSyncStatus, syncSessions } from './lib/sync';
 import { Tabs, TabsContent } from './components/ui/tabs';
 import { T } from './components/nova';
 import { type CpuOpponent } from './lib/cpuOpponent';
-import { loadProfile, normalizeProfile, type Profile } from './lib/auth';
 import { arenaById, eloAfter, type Arena } from './lib/arena';
 import { outcomeOf, settleMatch, type MatchOutcome } from './lib/match';
 import { SOLO_MIN_MINUTES } from './lib/economy';
@@ -46,7 +50,6 @@ export default function App() {
     DMSans_500Medium,
     DMSans_700Bold,
     Fraunces_600SemiBold,
-    Fraunces_400Regular_Italic,
     PressStart2P_400Regular,
   });
   const [activeTab, setActiveTab] = useState<AppTab>('battle');
@@ -74,12 +77,39 @@ export default function App() {
   // 이번 판에 들고 들어간 쿠폰과 실제로 낸 참가비. 입장할 때 이미 지갑에서 빠졌다.
   const [matchCoupons, setMatchCoupons] = useState<CouponId[]>([]);
   const [entryPaid, setEntryPaid] = useState(0);
-  const [profile, setProfile] = useState<Profile>(normalizeProfile({ name: 'Guest' }));
+  // undefined = still checking storage, null = no local profile yet (show Login)
+  const [profile, setProfile] = useState<Profile | null | undefined>(undefined);
+  // present only when Google + the sheet allowlist approved this user
+  const [authSession, setAuthSession] = useState<AuthSession | null>(null);
 
   useEffect(() => {
-    loadProfile().then((saved) => {
-      if (saved) setProfile(saved);
+    let cancelled = false;
+    (async () => {
+      const [storedProfile, restoredSession] = await Promise.all([
+        loadProfile(),
+        googleSheetAuth.restoreSession().catch(() => null),
+      ]);
+      let next = storedProfile;
+      if (!next && restoredSession) {
+        next = await saveProfile({
+          name: restoredSession.user.displayName,
+          avatar: restoredSession.user.avatar,
+        });
+      }
+      if (cancelled) return;
+      setAuthSession(restoredSession);
+      setProfile(next);
+      // fire and forget — the timer and first render never wait on the sheet
+      if (restoredSession) void syncSessions(restoredSession);
+    })().catch(() => {
+      if (!cancelled) setProfile(null);
     });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
     // 앱을 비운 사이 지나간 자정들 — 타임캡슐·복리·끊길 뻔한 연속 — 을 먼저 정산한다.
     void settleDailyCoupons().then((events) => {
       if (events.length) setRefreshKey((k) => k + 1);
@@ -101,6 +131,39 @@ export default function App() {
     return () => {
       cancelled = true;
     };
+  }, []);
+
+  // Coming back to the app (native) or to the tab (web — react-native-web maps
+  // visibilitychange onto AppState) pulls whatever other devices saved meanwhile.
+  useEffect(() => {
+    if (!authSession) return;
+    const subscription = AppState.addEventListener('change', (next) => {
+      if (next === 'active') void syncSessions(authSession);
+    });
+    return () => subscription.remove();
+  }, [authSession]);
+
+  // A sync that lands new data re-reads every screen keyed on refreshKey. Pulled
+  // sessions can close out capsule/compound days, so settle those first.
+  useEffect(
+    () =>
+      subscribeSyncStatus((status) => {
+        if (status.state !== 'ok') return;
+        void settleDailyCoupons()
+          .catch(() => [])
+          .then(() => setRefreshKey((k) => k + 1));
+      }),
+    []
+  );
+
+  const signOut = useCallback(async () => {
+    await Promise.all([googleSheetAuth.signOut(), resetSyncState()]);
+    await clearProfile();
+    setAuthSession(null);
+    setBattlePane('lobby');
+    setResult(null);
+    setActiveTab('battle');
+    setProfile(null);
   }, []);
 
   const selectTab = useCallback((tab: AppTab) => {
@@ -253,6 +316,23 @@ export default function App() {
   // after every hook — an early return above them breaks hook order on load.
   // fontError falls through to the system font rather than hanging on a blank screen.
   if (!fontsLoaded && !fontError) return null;
+  if (profile === undefined) return <Loading />;
+  if (profile === null) {
+    return (
+      <SafeAreaProvider>
+        <SafeAreaView style={styles.safeArea} edges={['top', 'left', 'right', 'bottom']}>
+          <Login
+            onLoggedIn={(nextProfile, session) => {
+              setAuthSession(session);
+              setProfile(nextProfile);
+              if (session) void syncSessions(session);
+            }}
+          />
+          <StatusBar style="dark" />
+        </SafeAreaView>
+      </SafeAreaProvider>
+    );
+  }
 
   // 매치 중(타이머)과 책을 펼친 ROLL 에서만 탭 바를 감춘다.
   const showTabs = !(activeTab === 'battle' && battleActive) && !(activeTab === 'roll' && rollFocused);
@@ -269,6 +349,7 @@ export default function App() {
           <TabsContent value="roll" className="flex-1 w-full max-w-lg mx-auto">
             <PageRoll
               onFocusChange={onRollFocus}
+              refreshKey={refreshKey}
               onOpenBag={() => {
                 selectTab('shop');
                 setBagSignal((n) => n + 1);
@@ -277,7 +358,11 @@ export default function App() {
           </TabsContent>
 
           <TabsContent value="stats" className="flex-1 w-full max-w-lg mx-auto">
-            <Dashboard isActive={activeTab === 'stats'} refreshKey={refreshKey} />
+            <Dashboard
+              isActive={activeTab === 'stats'}
+              refreshKey={refreshKey}
+              authSession={authSession}
+            />
           </TabsContent>
 
           <TabsContent value="battle" className="flex-1">
@@ -288,10 +373,13 @@ export default function App() {
                 onBack={() => setBattlePane('lobby')}
                 onChanged={() => setRefreshKey((k) => k + 1)}
                 profile={profile}
+                authSession={authSession}
                 onEditProfile={() => setBattlePane('profile')}
+                onSignOut={signOut}
               />
             ) : battlePane === 'profile' ? (
               <ProfileEdit
+                refreshKey={refreshKey}
                 profile={profile}
                 onProfileChanged={setProfile}
                 onBack={() => setBattlePane('lobby')}
@@ -303,12 +391,15 @@ export default function App() {
               >
                 <StudyTimer
                   profile={profile}
+                  refreshKey={refreshKey}
                   matchStarting={countdown !== null}
                   opponent={opponent}
                   solo={solo}
                   arena={arena}
                   coupons={matchCoupons}
                   onFinished={(summary) => {
+                    // onFinished only fires once the session is saved
+                    if (authSession) void syncSessions(authSession);
                     if (summary) {
                       void closeMatch(summary);
                       return;
@@ -327,6 +418,7 @@ export default function App() {
               </ScrollView>
             ) : (
               <BattleLobby
+                refreshKey={refreshKey}
                 onMatchStart={(rival, matchRank, isSolo, coupons, paid) => {
                   setOpponent(rival);
                   setArena(matchRank);
@@ -349,7 +441,7 @@ export default function App() {
           </TabsContent>
 
           <TabsContent value="shop" className="flex-1 w-full max-w-lg mx-auto">
-            <Shop bagSignal={bagSignal} />
+            <Shop bagSignal={bagSignal} refreshKey={refreshKey} />
           </TabsContent>
 
         </Tabs>
