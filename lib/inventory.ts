@@ -419,8 +419,8 @@ export async function debugSet(patch: Partial<Inventory>): Promise<Inventory> {
   return save({ ...inv, ...patch });
 }
 
-/** 화면에서 쓰는 훅. 값이 올 때까지는 기본 지갑을 보여 준다. */
-export function useInventory() {
+/** 화면에서 쓰는 훅. 값이 올 때까지는 기본 지갑을 보여 준다. refreshKey 가 바뀌면 다시 읽는다. */
+export function useInventory(refreshKey: unknown = 0) {
   const [inv, setInv] = useState<Inventory>(DEFAULT_INVENTORY);
   const [ready, setReady] = useState(false);
 
@@ -431,7 +431,7 @@ export function useInventory() {
 
   useEffect(() => {
     refresh();
-  }, [refresh]);
+  }, [refresh, refreshKey]);
 
   const buy = useCallback(async (id: string, price: number, unique: boolean) => {
     setInv(await buyItem(id, price, unique));

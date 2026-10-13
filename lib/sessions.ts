@@ -178,9 +178,31 @@ export function formatDuration(ms: number): string {
   return `${minutes}m`;
 }
 
+/** Every stored row, tombstones included, unsorted. For the sync engine; UI code wants loadSessions(). */
+export async function loadAllSessions(): Promise<StudySession[]> {
+  try {
+    const raw = await storage.getItem(SESSIONS_STORAGE_KEY);
+    const parsed = raw ? JSON.parse(raw) : [];
+    return Array.isArray(parsed)
+      ? parsed.filter((s): s is StudySession => Boolean(s && typeof s === 'object'))
+      : [];
+  } catch {
+    return [];
+  }
+}
+
+export async function replaceAllSessions(rows: StudySession[]): Promise<void> {
+  await storage.setItem(SESSIONS_STORAGE_KEY, JSON.stringify(rows));
+}
+
+/** Tombstones every live row instead of removing the key, so a sync pull cannot bring them back. */
 export async function clearSessions(): Promise<void> {
   try {
-    await storage.removeItem(SESSIONS_STORAGE_KEY);
+    const nowIso = new Date().toISOString();
+    const rows = await loadAllSessions();
+    await replaceAllSessions(
+      rows.map((s) => (s.deletedAt === null ? { ...s, updatedAt: nowIso, deletedAt: nowIso } : s))
+    );
   } catch (error) {
     console.error('Failed to clear sessions:', error);
   }
