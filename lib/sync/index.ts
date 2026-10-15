@@ -61,7 +61,7 @@ export function createSyncEngine(gateway: SyncGateway) {
       const email = auth.user.email.trim().toLowerCase();
       const localOnlyIds = new Set(state.localOnlyIds);
       if (state.email === null) {
-        const guestRows = (await loadAllSessions()).filter((s) => !localOnlyIds.has(s.id));
+        const guestRows = (await loadAllSessions()).filter((s) => !s.deletedAt && !localOnlyIds.has(s.id));
         if (guestRows.length && !consent) {
           // No account binding, pull, or push until the user explicitly chooses.
           return setStatus({ state: 'needs-consent', lastSyncedAt: null, consentEmail: email });
