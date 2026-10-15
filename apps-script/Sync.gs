@@ -1,4 +1,4 @@
-// Study-session sync. Shares global scope with Code.gs (DEFAULT_SPREADSHEET_ID, normalize_, authError_).
+// Study-session sync. Shares global scope with Code.gs (spreadsheetId_, normalize_, authError_).
 const SESSIONS_SHEET_NAME = 'Sessions';
 const SESSION_COLUMNS = [
   'email', 'id', 'startedAt', 'endedAt', 'durationMs', 'subject', 'type', 'source',
@@ -59,9 +59,7 @@ function handleSync_(body, email) {
 }
 
 function getSessionsSheet_() {
-  const spreadsheetId =
-    PropertiesService.getScriptProperties().getProperty('SPREADSHEET_ID') || DEFAULT_SPREADSHEET_ID;
-  const spreadsheet = SpreadsheetApp.openById(spreadsheetId);
+  const spreadsheet = SpreadsheetApp.openById(spreadsheetId_());
   let sheet = spreadsheet.getSheetByName(SESSIONS_SHEET_NAME);
   if (!sheet) {
     sheet = spreadsheet.insertSheet(SESSIONS_SHEET_NAME);
