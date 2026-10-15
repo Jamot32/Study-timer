@@ -5,17 +5,21 @@ import type { AuthSession } from './types';
 
 const AUTH_SESSION_KEY = 'study-timer.auth-session.v1';
 
-// expo-secure-store has no web implementation — every call throws there, which
-// used to reject restoreSession and leave the web build on the loading screen.
-// Web falls back to the same AsyncStorage/localStorage the rest of the app uses.
-// The session's syncToken is a bearer token there, as readable as any other
-// first-party web credential; revoke all of them by rotating SYNC_SECRET.
+// Web credentials live only for this page lifetime; reloading requires sign-in.
+// Never persist the session blob: it contains the bearer syncToken.
+let webSession: string | null = null;
+
 const store =
   Platform.OS === 'web'
     ? {
-        get: (key: string) => storage.getItem(key) as Promise<string | null>,
-        set: (key: string, value: string) => storage.setItem(key, value) as Promise<void>,
-        remove: (key: string) => storage.removeItem(key) as Promise<void>,
+        get: async (_key: string) => webSession,
+        set: async (_key: string, value: string) => {
+          webSession = value;
+        },
+        remove: async (key: string) => {
+          webSession = null;
+          await storage.removeItem(key);
+        },
       }
     : {
         get: (key: string) => SecureStore.getItemAsync(key),
@@ -25,6 +29,11 @@ const store =
           }),
         remove: (key: string) => SecureStore.deleteItemAsync(key),
       };
+
+if (Platform.OS === 'web') {
+  // Migrate old builds at startup without ever reading their persisted token.
+  void clearSecureSession();
+}
 
 function isAuthSession(value: unknown): value is AuthSession {
   if (!value || typeof value !== 'object') return false;
