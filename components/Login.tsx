@@ -16,9 +16,24 @@ export default function Login({ onLoggedIn }: LoginProps) {
   const [error, setError] = useState<string | null>(null);
   const trimmed = name.trim();
 
+  const signInAsGuest = async (guestName: string) => {
+    if (checking) return;
+    setChecking(true);
+    setError(null);
+    try {
+      // A deliberate guest choice must not restore an earlier Google account later.
+      await googleSheetAuth.signOut();
+      onLoggedIn(await saveProfile({ name: guestName }), null);
+    } catch {
+      setError('Could not start guest mode. Please try again.');
+    } finally {
+      setChecking(false);
+    }
+  };
+
   const submit = async () => {
     if (!trimmed) return;
-    onLoggedIn(await saveProfile({ name: trimmed }), null);
+    await signInAsGuest(trimmed);
   };
 
   const showError = (cause: unknown) =>
@@ -79,7 +94,7 @@ export default function Login({ onLoggedIn }: LoginProps) {
           />
         </View>
 
-        <Button block size="lg" variant="outline" disabled={!trimmed} onPress={submit}>
+        <Button block size="lg" variant="outline" disabled={!trimmed || checking} onPress={submit}>
           Start
         </Button>
         {/* PRD P0-1 is guest-first: never wall the timer behind an account. */}
@@ -87,7 +102,8 @@ export default function Login({ onLoggedIn }: LoginProps) {
           block
           size="md"
           variant="ghost"
-          onPress={async () => onLoggedIn(await saveProfile({ name: 'Guest' }), null)}
+          disabled={checking}
+          onPress={() => signInAsGuest('Guest')}
         >
           Continue as guest
         </Button>
