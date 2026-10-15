@@ -1,16 +1,13 @@
 import { getSilentGoogleIdToken, signOutOfGoogle } from './google-id-token';
 import {
   clearSecureSession,
+  isAuthSession,
   readSecureSession,
   writeSecureSession,
 } from './secure-session-store';
 import { AuthError, type AuthErrorCode, type AuthGateway, type AuthSession } from './types';
 
 const EXPIRY_SKEW_MS = 60_000;
-
-type LoginResponse =
-  | { ok: true; session: AuthSession }
-  | { ok: false; code?: AuthErrorCode; error?: string };
 
 function endpoint(): string {
   const url = process.env.EXPO_PUBLIC_AUTH_ENDPOINT?.trim();
@@ -36,19 +33,39 @@ async function authorize(idToken: string): Promise<AuthSession> {
     throw new AuthError('network', 'Could not reach the login server.');
   }
 
-  let payload: LoginResponse;
+  let payload: unknown;
   try {
-    payload = (await response.json()) as LoginResponse;
+    payload = await response.json();
   } catch {
     // An HTML page here usually means the /exec URL is wrong or the deployment
     // is not shared with "Anyone".
     throw new AuthError('invalid-response', 'The login server returned an invalid response.');
   }
 
+  if (
+    !payload ||
+    typeof payload !== 'object' ||
+    !('ok' in payload) ||
+    typeof payload.ok !== 'boolean'
+  ) {
+    throw new AuthError('invalid-response', 'The login server returned an invalid response.');
+  }
+
   if (!response.ok || !payload.ok) {
-    const code = payload.ok ? 'invalid-response' : (payload.code ?? 'provider-error');
-    const message = payload.ok ? 'Login failed.' : (payload.error ?? 'Login failed.');
+    const code = payload.ok
+      ? 'invalid-response'
+      : 'code' in payload && typeof payload.code === 'string'
+        ? (payload.code as AuthErrorCode)
+        : 'provider-error';
+    const message =
+      !payload.ok && 'error' in payload && typeof payload.error === 'string'
+        ? payload.error
+        : 'Login failed.';
     throw new AuthError(code, message);
+  }
+
+  if (!('session' in payload) || !isAuthSession(payload.session)) {
+    throw new AuthError('invalid-response', 'The login server returned an invalid session.');
   }
 
   await writeSecureSession(payload.session);

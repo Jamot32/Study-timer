@@ -27,6 +27,8 @@ The spreadsheet and Apps Script configuration are never bundled into the app. Pu
 
 ## Session behavior
 
+Fresh login responses must contain a valid session before the app saves or returns them. Login and cached-session reads share the same `isAuthSession` shape check; malformed login responses fail with `invalid-response`. The `syncToken` remains optional for compatibility with sessions created before sync existed.
+
 A cached session is accepted until one minute before the Google token expiration. After expiration, native builds use Google silent sign-in and recheck the sheet; the web build has no silent refresh and shows the sign-in button again. Any restore failure resolves to "signed out" rather than blocking the loading screen. Disabling a sheet row therefore takes effect no later than the current short-lived session expiration. Explicit sign-out clears SecureStore even if the Google SDK or network is unavailable.
 
 Login also issues a sync token that lasts 30 days, but every push/pull call re-checks the sheet, so disabling or removing a row stops sync immediately. Rotating the `SYNC_SECRET` script property revokes all issued sync tokens.
