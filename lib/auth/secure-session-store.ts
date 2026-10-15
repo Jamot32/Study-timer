@@ -26,7 +26,7 @@ const store =
         remove: (key: string) => SecureStore.deleteItemAsync(key),
       };
 
-function isAuthSession(value: unknown): value is AuthSession {
+export function isAuthSession(value: unknown): value is AuthSession {
   if (!value || typeof value !== 'object') return false;
   const session = value as Partial<AuthSession>;
   const user = session.user as Partial<AuthSession['user']> | undefined;
