@@ -146,6 +146,14 @@ export default function App() {
   useEffect(
     () =>
       subscribeSyncStatus((status) => {
+        if (status.errorCode === 'not-approved' || status.errorCode === 'disabled') {
+          // Revoke Google auth immediately, but keep the local profile/history for guest use.
+          setAuthSession(null);
+          void googleSheetAuth.signOut().catch((error) => {
+            console.error('Failed to clear revoked auth session:', error);
+          });
+          return;
+        }
         if (status.state !== 'ok') return;
         void settleDailyCoupons()
           .catch(() => [])
