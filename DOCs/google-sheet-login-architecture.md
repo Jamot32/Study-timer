@@ -35,6 +35,8 @@ Choosing name-only login or "Continue as guest" awaits the same sign-out before 
 
 Login also issues a sync token that lasts 30 days, but every push/pull call re-checks the sheet, so disabling or removing a row stops sync immediately. Rotating the `SYNC_SECRET` script property revokes all issued sync tokens.
 
+Sign-out invalidates the sync generation before clearing auth storage. Late responses cannot start further local writes or pushes, update cursors, or publish success/error status. Reset waits for already-issued local writes before clearing sync timestamps and preserves the last account owner; it does not wait for network responses. Requests already sent to the gateway cannot be retracted. Overlapping sync callers await the latest queued auth state, including signed-out (`null`), while same-account sync triggers remain single-flight.
+
 ## Current scope
 
 - Google login and sheet allowlist.
