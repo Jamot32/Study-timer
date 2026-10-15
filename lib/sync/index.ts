@@ -3,15 +3,18 @@ import { loadAllSessions, replaceAllSessions, storage } from '../sessions.ts';
 import { changedSince, mergeSessions } from './merge.ts';
 import { sheetGateway, SyncError, type SyncGateway } from './sheet-gateway.ts';
 
-export type SyncState = 'idle' | 'syncing' | 'ok' | 'error' | 'signed-out' | 'needs-sign-in';
-export type SyncStatus = { state: SyncState; lastSyncedAt: string | null; error?: string };
+export type SyncState = 'idle' | 'syncing' | 'ok' | 'error' | 'signed-out' | 'needs-sign-in' | 'needs-consent';
+export type SyncStatus = { state: SyncState; lastSyncedAt: string | null; error?: string; consentEmail?: string };
+type GuestHistoryConsent = 'upload' | 'keep-local';
 export type { SyncGateway } from './sheet-gateway.ts';
 
 export const SYNC_STATE_STORAGE_KEY = '@study_timer/sync-state';
 
 type StoredSyncState = {
-  /** Account the local rows belong to; null = guest rows, uploaded on the next sign-in. */
+  /** Account the syncable local rows belong to; null = guest rows awaiting consent. */
   email: string | null;
+  /** Declined guest rows stay on this device and never participate in account sync. */
+  localOnlyIds: string[];
   /** serverAt of the last successful pull. */
   cursor: string | null;
   /** Local clock: rows updated after this may not be on the server yet. */
@@ -19,7 +22,7 @@ type StoredSyncState = {
   lastSyncedAt: string | null;
 };
 
-const EMPTY_STATE: StoredSyncState = { email: null, cursor: null, lastPushedAt: null, lastSyncedAt: null };
+const EMPTY_STATE: StoredSyncState = { email: null, localOnlyIds: [], cursor: null, lastPushedAt: null, lastSyncedAt: null };
 
 async function loadState(): Promise<StoredSyncState> {
   try {
@@ -39,7 +42,7 @@ export function createSyncEngine(gateway: SyncGateway) {
   let status: SyncStatus = { state: 'idle', lastSyncedAt: null };
   const listeners = new Set<(s: SyncStatus) => void>();
   let inFlight: Promise<SyncStatus> | null = null;
-  let queued: { auth: AuthSession | null } | null = null;
+  let queued: { auth: AuthSession | null; consent?: GuestHistoryConsent } | null = null;
 
   function setStatus(next: SyncStatus): SyncStatus {
     status = next;
@@ -47,7 +50,7 @@ export function createSyncEngine(gateway: SyncGateway) {
     return next;
   }
 
-  async function run(auth: AuthSession | null): Promise<SyncStatus> {
+  async function run(auth: AuthSession | null, consent?: GuestHistoryConsent): Promise<SyncStatus> {
     if (!auth) return setStatus({ state: 'signed-out', lastSyncedAt: null });
     const token = auth.syncToken;
     if (!token) return setStatus({ state: 'needs-sign-in', lastSyncedAt: status.lastSyncedAt });
@@ -56,12 +59,24 @@ export function createSyncEngine(gateway: SyncGateway) {
     setStatus({ state: 'syncing', lastSyncedAt: state.lastSyncedAt });
     try {
       const email = auth.user.email.trim().toLowerCase();
+      const localOnlyIds = new Set(state.localOnlyIds);
+      if (state.email === null) {
+        const guestRows = (await loadAllSessions()).filter((s) => !localOnlyIds.has(s.id));
+        if (guestRows.length && !consent) {
+          // No account binding, pull, or push until the user explicitly chooses.
+          return setStatus({ state: 'needs-consent', lastSyncedAt: null, consentEmail: email });
+        }
+        if (consent === 'keep-local') {
+          guestRows.forEach((s) => localOnlyIds.add(s.id));
+          state = { ...state, localOnlyIds: [...localOnlyIds] };
+        }
+      }
       if (state.email !== null && state.email !== email) {
         // ponytail: a different account signed in on this device. Its rows must not be pushed
-        // to the new account, so drop them and start fresh; ceiling: edits the previous account
+        // to the new account, so drop its syncable rows and retain declined guest rows; ceiling: edits the previous account
         // never synced from this device are lost. Upgrade: per-account storage keys.
-        await replaceAllSessions([]);
-        state = { ...EMPTY_STATE };
+        await replaceAllSessions((await loadAllSessions()).filter((s) => localOnlyIds.has(s.id)));
+        state = { ...EMPTY_STATE, localOnlyIds: state.localOnlyIds };
       }
       if (state.email !== email) {
         state = { ...state, email };
@@ -72,9 +87,11 @@ export function createSyncEngine(gateway: SyncGateway) {
       const pulled = await gateway.pull(token, state.cursor);
       // 1 ms back so a row saved in this same millisecond still counts as "after" next run.
       const startedAt = new Date(Date.now() - 1).toISOString();
-      const local = await loadAllSessions();
-      const merged = mergeSessions(local, pulled.sessions);
-      await replaceAllSessions(merged);
+      const allLocal = await loadAllSessions();
+      const localOnly = allLocal.filter((s) => localOnlyIds.has(s.id));
+      const local = allLocal.filter((s) => !localOnlyIds.has(s.id));
+      const merged = mergeSessions(local, pulled.sessions.filter((s) => !localOnlyIds.has(s.id)));
+      await replaceAllSessions([...localOnly, ...merged]);
       state = { ...state, cursor: pulled.serverAt };
       await saveState(state);
 
@@ -96,16 +113,18 @@ export function createSyncEngine(gateway: SyncGateway) {
     }
   }
 
-  function syncSessions(auth: AuthSession | null): Promise<SyncStatus> {
+  function syncSessions(auth: AuthSession | null, consent?: GuestHistoryConsent): Promise<SyncStatus> {
     if (inFlight) {
-      queued = { auth };
+      // A routine foreground/timer sync must not overwrite an explicit queued choice.
+      const sameAccount = queued?.auth?.user.email === auth?.user.email;
+      queued = { auth, consent: consent ?? (sameAccount ? queued?.consent : undefined) };
       return inFlight;
     }
-    inFlight = run(auth).finally(() => {
+    inFlight = run(auth, consent).finally(() => {
       inFlight = null;
       const next = queued;
       queued = null;
-      if (next) void syncSessions(next.auth);
+      if (next) void syncSessions(next.auth, next.consent);
     });
     return inFlight;
   }
@@ -123,11 +142,11 @@ export function createSyncEngine(gateway: SyncGateway) {
      * Called on sign-out. Clears cursor and push/sync times but keeps `email` as the last owner:
      * clearing it would make the leftover rows look like guest data and upload them to whichever
      * account signs in next. Signing back in as the same account re-pulls everything and re-sends
-     * local rows (the server ignores ones it already has).
+     * syncable local rows (the server ignores ones it already has). Local-only IDs are retained.
      */
     async resetSyncState(): Promise<void> {
-      const { email } = await loadState();
-      await saveState({ ...EMPTY_STATE, email });
+      const { email, localOnlyIds } = await loadState();
+      await saveState({ ...EMPTY_STATE, email, localOnlyIds });
       setStatus({ state: 'signed-out', lastSyncedAt: null });
     },
   };
