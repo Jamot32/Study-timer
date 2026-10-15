@@ -31,6 +31,8 @@ Fresh login responses must contain a valid session before the app saves or retur
 
 A cached session is accepted until one minute before the Google token expiration. After expiration, native builds use Google silent sign-in and recheck the sheet; the web build has no silent refresh and shows the sign-in button again. Any restore failure resolves to "signed out" rather than blocking the loading screen. Disabling a sheet row therefore takes effect no later than the current short-lived session expiration. Explicit sign-out clears SecureStore even if the Google SDK or network is unavailable.
 
+Choosing name-only login or "Continue as guest" awaits the same sign-out before saving the local profile and entering guest mode, so an earlier persisted Google session cannot restore on the next launch. Guest mode remains available without Google configuration or the native SDK.
+
 Login also issues a sync token that lasts 30 days, but every push/pull call re-checks the sheet, so disabling or removing a row stops sync immediately. Rotating the `SYNC_SECRET` script property revokes all issued sync tokens.
 
 ## Current scope
