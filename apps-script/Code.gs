@@ -45,8 +45,14 @@ function verifyGoogleToken_(idToken) {
   if (!expectedAudience) throw authError_('provider-error', 'Server OAuth configuration is missing.');
 
   const response = UrlFetchApp.fetch(
-    'https://oauth2.googleapis.com/tokeninfo?id_token=' + encodeURIComponent(idToken),
-    { muteHttpExceptions: true }
+    'https://oauth2.googleapis.com/tokeninfo',
+    {
+      method: 'post',
+      contentType: 'application/x-www-form-urlencoded',
+      payload: { id_token: idToken },
+      followRedirects: false,
+      muteHttpExceptions: true,
+    }
   );
   if (response.getResponseCode() !== 200) {
     throw authError_('provider-error', 'Google could not verify this login.');
