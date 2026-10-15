@@ -13,13 +13,14 @@ Create a private spreadsheet with a worksheet named `Users`. Row 1 must contain 
 - Normalize email addresses to lowercase.
 - `status` must be `active` to grant access. Any other value denies login.
 - Keep the spreadsheet private and shared only with administrators.
+- Before deployment, open **Share** and confirm **General access: Restricted** and that every listed person is an administrator. Remove link-wide access and non-admin sharing before using the sheet for login or sync.
 - Never put passwords, OAuth tokens, API keys, or signing secrets in the sheet.
 
 ## 2. Create the Apps Script project
 
 Create a standalone Apps Script project and copy in `Code.gs` and `appsscript.json`. In **Project Settings → Script properties**, add:
 
-- `SPREADSHEET_ID` (optional): the ID between `/d/` and `/edit` in the sheet URL. Defaults to the current beta sheet, [`13VRYsnBayobLLOEdLGvd8OoBUqSUIjGnHrDd0KxCn8I`](https://docs.google.com/spreadsheets/d/13VRYsnBayobLLOEdLGvd8OoBUqSUIjGnHrDd0KxCn8I/edit).
+- `SPREADSHEET_ID` (required): the ID between `/d/` and `/edit` in your private sheet URL. Login and sync use this script property only; there is no default or bound-sheet fallback. If it is missing or blank, requests that read the sheet fail with `not-configured`. Keep the actual ID out of source and public documentation.
 - `GOOGLE_WEB_CLIENT_ID`: the Web OAuth client ID used by the Expo app.
 - `SYNC_SECRET`: a long random string (e.g. `openssl rand -base64 48`) used to HMAC-sign the 30-day sync tokens issued at login. Required: without it login and sync both fail with `not-configured`. Rotating it invalidates every issued sync token at once; users get a new token on their next login.
 
@@ -80,7 +81,7 @@ This backend is intended for a small closed user group. Apps Script quotas, late
 
 - Google Cloud project: `study-timer-509421`. OAuth consent screen is External, in Testing mode, with test user `syoung3323@gmail.com`. Only the Web OAuth client exists. iOS and Android clients wait for a real bundle ID (currently the placeholder `com.anonymous.study-timer`).
 - Apps Script project `study-timer-auth` is bound to the "Study timer Login" sheet rather than standalone. This works because `Code.gs` opens the sheet with `openById`.
-- Script properties: `GOOGLE_WEB_CLIENT_ID` is set. `SYNC_SECRET` must be added before deploying the sync version of `Code.gs` (with `Sync.gs`), or login starts failing with `not-configured`. `SPREADSHEET_ID` is not set, so `DEFAULT_SPREADSHEET_ID` in `Code.gs` is used.
+- Script properties: `GOOGLE_WEB_CLIENT_ID` is set. Set `SPREADSHEET_ID` explicitly before deploying this version of `Code.gs` and `Sync.gs`; deployments that relied on the former source default must add it. `SYNC_SECRET` must also be set for login and sync. Missing spreadsheet or sync configuration fails with `not-configured`. Confirm the sheet is admin-private using the sharing check above; repository changes cannot verify its live ACL.
 - Deployment: Web app, Execute as Me, Access Anyone, version 2+ (sync). The manifest needs the full `spreadsheets` scope because Sync.gs writes the `Sessions` tab. The `/exec` URL lives in the local `.env.local` as `EXPO_PUBLIC_AUTH_ENDPOINT`.
 - To ship code changes, use **Deploy → Manage deployments → edit (pencil) → Version: New version**. This keeps the `/exec` URL the same. **New deployment** creates a new URL instead.
 - Smoke test: `curl -sL <exec-url>` returns `{"ok":true,"name":"study-timer-auth"}`. `curl -sL -d '{"action":"login","idToken":"bad"}' <exec-url>` returns `ok:false` with code `provider-error`. Don't pass `-X POST`: it keeps POST across Apps Script's 302 redirect and returns a Drive "Page Not Found" page.
