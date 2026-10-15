@@ -8,6 +8,7 @@ export type AuthUser = {
 
 export type AuthSession = {
   user: AuthUser;
+  /** Google ID-token expiry: gates native cached restore, not web page lifetime or sync-token validity. */
   expiresAt: string;
   /** Server-signed bearer token for session sync. Missing on sessions stored before sync existed. */
   syncToken?: string;

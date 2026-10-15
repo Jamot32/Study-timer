@@ -1,3 +1,4 @@
+import { Platform } from 'react-native';
 import { getSilentGoogleIdToken, signOutOfGoogle } from './google-id-token';
 import {
   clearSecureSession,
@@ -74,6 +75,11 @@ async function authorize(idToken: string): Promise<AuthSession> {
 
 export const googleSheetAuth: AuthGateway = {
   async restoreSession() {
+    // Web sign-in lasts only for this page's lifetime. Never restore a cached
+    // identity or syncToken, even from legacy browser storage; reload requires
+    // interactive sign-in. Memory-only storage is handled by the session store.
+    if (Platform.OS === 'web') return null;
+
     try {
       const cached = await readSecureSession();
       if (!cached) return null;
