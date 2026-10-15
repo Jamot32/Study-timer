@@ -44,7 +44,7 @@ export async function getGoogleIdToken(): Promise<string | null> {
   return null;
 }
 
-/** GIS has no silent refresh; an expired web session signs in again from the button. */
+/** Web never restores across page loads; sign-in uses the GIS button again. */
 export async function getSilentGoogleIdToken(): Promise<string | null> {
   return null;
 }

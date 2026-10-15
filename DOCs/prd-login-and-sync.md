@@ -70,7 +70,7 @@ Both providers on both platforms. Apple is required on iOS by App Store Guidelin
 - [ ] Given the user cancels the provider flow, when they return to the app, then they are signed out, on the screen they started from, with no error shown
 - [ ] Given the provider flow fails (network, revoked consent, provider outage), then a specific, actionable error is shown and the app remains fully usable signed-out
 - [ ] Given a user who signs in with Apple's "Hide My Email", then the account is created successfully and no feature depends on a real email address
-- [ ] Auth tokens are stored in the platform keychain/keystore, never in AsyncStorage
+- [ ] Native auth tokens are stored in the platform keychain/keystore; web auth tokens remain memory-only and require sign-in after reload, never in AsyncStorage/localStorage
 
 *Technical note:* see **Technical Design** below for the concrete provider setup. `lib/sessions.ts` exports a single `storage` shim over AsyncStorage — tokens must not go through it.
 
@@ -128,6 +128,12 @@ Not built now, but v1 must not preclude them:
 - **Shared or social features.** Keep a clear boundary between the account record and session records so a future visibility/permission field has an obvious home.
 - **Server-side aggregation** (streaks, cross-device stats computed remotely). Keep the aggregation functions in `lib/sessions.ts` pure over a session array so the same logic can run either side.
 - **Non-stopwatch session types.** The `type` discriminator already exists in the schema; the sync layer must round-trip unknown future fields rather than dropping them.
+
+## Current Google Sheet platform session policy
+
+The current Google Sheet adapter follows `google-sheet-login-architecture.md`; the Supabase design below remains a future migration design. Native persists auth in SecureStore and uses Google ID-token `expiresAt` (typically about one hour, with a one-minute margin) to gate cached restore, then attempts silent sign-in and a sheet recheck.
+
+Web keeps the session and bearer `syncToken` in memory only, never AsyncStorage/localStorage (storage enforcement: handoff issue #3). Web `restoreSession()` returns signed out on every page load without reading cached credentials or attempting silent sign-in; a reload requires interactive Google sign-in again. Guest/name use and local history remain available, and a saved profile does not imply restored Google authentication. The server's up-to-30-day sync-token validity does not promise a 30-day web session. `expiresAt` is Google ID-token expiry, not sync-token expiry; it does not automatically sign out an already-open web page.
 
 ## Technical Design
 

@@ -21,15 +21,18 @@ The app depends only on `AuthGateway` from `lib/auth/types.ts`:
 3. Apps Script asks Google's token verification endpoint to validate it.
 4. Apps Script independently checks audience, issuer, expiration, and verified email.
 5. Only then does Apps Script look up the normalized email in the private `Users` worksheet.
-6. The app stores the approved, short-lived session metadata in platform SecureStore (AsyncStorage on web, where SecureStore does not exist; the record holds no secrets).
+6. Native stores the approved session, including its bearer `syncToken`, in platform SecureStore. Web policy requires the session and `syncToken` to remain in memory only, never AsyncStorage/localStorage; storage enforcement is owned by issue #3 in `login-system-issues-handoff.md`.
 
 The spreadsheet and Apps Script configuration are never bundled into the app. Public Expo variables contain only the web endpoint and OAuth client identifiers, not secrets.
 
 ## Session behavior
 
-A cached session is accepted until one minute before the Google token expiration. After expiration, native builds use Google silent sign-in and recheck the sheet; the web build has no silent refresh and shows the sign-in button again. Any restore failure resolves to "signed out" rather than blocking the loading screen. Disabling a sheet row therefore takes effect no later than the current short-lived session expiration. Explicit sign-out clears SecureStore even if the Google SDK or network is unavailable.
+`AuthSession.expiresAt` is the Google ID token expiration (typically about one hour), not the sync token expiration.
 
-Login also issues a sync token that lasts 30 days, but every push/pull call re-checks the sheet, so disabling or removing a row stops sync immediately. Rotating the `SYNC_SECRET` script property revokes all issued sync tokens.
+- **Native:** a SecureStore session is accepted until one minute before `expiresAt`. After that, restore uses Google silent sign-in and rechecks the sheet. Any restore failure resolves to "signed out" rather than blocking the loading screen. Explicit sign-out clears SecureStore even if the Google SDK or network is unavailable.
+- **Web:** `restoreSession()` always returns `null`, without reading cached credentials or attempting silent Google sign-in. Every page reload requires interactive Google sign-in again, even before `expiresAt` and even if a legacy stored `syncToken` remains valid. No cached identity is restored on its own. Guest/name use and local history remain available; a saved local profile is not Google authentication. During the current page lifetime, `expiresAt` does not trigger automatic sign-out; sync uses the in-memory `syncToken` and server authorization.
+
+Login also issues a sync token valid for up to 30 days. This is a server credential lifetime, not a promise of a 30-day web session or reload restore. Every push/pull call re-checks the sheet, so disabling or removing a row stops sync immediately. Rotating the `SYNC_SECRET` script property revokes all issued sync tokens.
 
 ## Current scope
 
