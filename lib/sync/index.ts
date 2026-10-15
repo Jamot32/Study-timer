@@ -4,7 +4,13 @@ import { changedSince, mergeSessions } from './merge.ts';
 import { sheetGateway, SyncError, type SyncGateway } from './sheet-gateway.ts';
 
 export type SyncState = 'idle' | 'syncing' | 'ok' | 'error' | 'signed-out' | 'needs-sign-in';
-export type SyncStatus = { state: SyncState; lastSyncedAt: string | null; error?: string };
+export type SyncStatus = {
+  state: SyncState;
+  lastSyncedAt: string | null;
+  error?: string;
+  /** Explicit server revocation; a missing sync token alone does not revoke UI auth. */
+  errorCode?: 'not-approved' | 'disabled';
+};
 export type { SyncGateway } from './sheet-gateway.ts';
 
 export const SYNC_STATE_STORAGE_KEY = '@study_timer/sync-state';
@@ -89,7 +95,12 @@ export function createSyncEngine(gateway: SyncGateway) {
       return setStatus({ state: 'ok', lastSyncedAt: state.lastSyncedAt });
     } catch (error) {
       if (error instanceof SyncError && (error.code === 'not-approved' || error.code === 'disabled')) {
-        return setStatus({ state: 'needs-sign-in', lastSyncedAt: state.lastSyncedAt, error: error.message });
+        return setStatus({
+          state: 'needs-sign-in',
+          lastSyncedAt: state.lastSyncedAt,
+          error: error.message,
+          errorCode: error.code,
+        });
       }
       const message = error instanceof Error ? error.message : 'Sync failed.';
       return setStatus({ state: 'error', lastSyncedAt: state.lastSyncedAt, error: message });
