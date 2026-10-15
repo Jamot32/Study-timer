@@ -155,9 +155,11 @@ export default function App() {
   );
 
   const signOut = useCallback(async () => {
-    await Promise.all([googleSheetAuth.signOut(), resetSyncState()]);
-    await clearProfile();
+    // Invalidate sync before auth storage is cleared; stop scheduling signed-in foreground syncs.
+    const reset = resetSyncState();
     setAuthSession(null);
+    await Promise.all([googleSheetAuth.signOut(), reset]);
+    await clearProfile();
     setBattlePane('lobby');
     setResult(null);
     setActiveTab('battle');

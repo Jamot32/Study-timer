@@ -39,7 +39,18 @@ export function createSyncEngine(gateway: SyncGateway) {
   let status: SyncStatus = { state: 'idle', lastSyncedAt: null };
   const listeners = new Set<(s: SyncStatus) => void>();
   let inFlight: Promise<SyncStatus> | null = null;
-  let queued: { auth: AuthSession | null } | null = null;
+  let queued: { auth: AuthSession | null; generation: number } | null = null;
+  let generation = 0;
+  let authKey: string | null = null;
+  let pendingWrite: Promise<void> = Promise.resolve();
+
+  // Reset must follow an already-issued local write, but never wait on a slow network call.
+  function write(operation: () => Promise<void>, runGeneration?: number): Promise<void> {
+    pendingWrite = pendingWrite.catch(() => {}).then(() => {
+      if (runGeneration === undefined || runGeneration === generation) return operation();
+    });
+    return pendingWrite;
+  }
 
   function setStatus(next: SyncStatus): SyncStatus {
     status = next;
@@ -47,47 +58,61 @@ export function createSyncEngine(gateway: SyncGateway) {
     return next;
   }
 
-  async function run(auth: AuthSession | null): Promise<SyncStatus> {
+  async function run(auth: AuthSession | null, runGeneration: number): Promise<SyncStatus> {
+    const isCurrent = () => runGeneration === generation;
+    await pendingWrite.catch(() => {});
+    if (!isCurrent()) return status;
     if (!auth) return setStatus({ state: 'signed-out', lastSyncedAt: null });
     const token = auth.syncToken;
     if (!token) return setStatus({ state: 'needs-sign-in', lastSyncedAt: status.lastSyncedAt });
 
     let state = await loadState();
+    if (!isCurrent()) return status;
     setStatus({ state: 'syncing', lastSyncedAt: state.lastSyncedAt });
     try {
+      if (!isCurrent()) return status;
       const email = auth.user.email.trim().toLowerCase();
       if (state.email !== null && state.email !== email) {
         // ponytail: a different account signed in on this device. Its rows must not be pushed
         // to the new account, so drop them and start fresh; ceiling: edits the previous account
         // never synced from this device are lost. Upgrade: per-account storage keys.
-        await replaceAllSessions([]);
+        await write(() => replaceAllSessions([]), runGeneration);
+        if (!isCurrent()) return status;
         state = { ...EMPTY_STATE };
       }
       if (state.email !== email) {
         state = { ...state, email };
-        await saveState(state);
+        await write(() => saveState(state), runGeneration);
+        if (!isCurrent()) return status;
       }
 
       // Pull before push: the merge decides which local rows are still winners worth sending.
       const pulled = await gateway.pull(token, state.cursor);
+      if (!isCurrent()) return status;
       // 1 ms back so a row saved in this same millisecond still counts as "after" next run.
       const startedAt = new Date(Date.now() - 1).toISOString();
       const local = await loadAllSessions();
+      if (!isCurrent()) return status;
       const merged = mergeSessions(local, pulled.sessions);
-      await replaceAllSessions(merged);
+      await write(() => replaceAllSessions(merged), runGeneration);
+      if (!isCurrent()) return status;
       state = { ...state, cursor: pulled.serverAt };
-      await saveState(state);
+      await write(() => saveState(state), runGeneration);
+      if (!isCurrent()) return status;
 
       // Only local rows that won the merge and changed since the last push; pulled rows are
       // already on the server. mergeSessions keeps object identity, so === means "local won".
       const winners = new Set(merged);
       const outgoing = changedSince(local, state.lastPushedAt).filter((s) => winners.has(s));
       if (outgoing.length) await gateway.push(token, outgoing);
+      if (!isCurrent()) return status;
 
       state = { ...state, lastPushedAt: startedAt, lastSyncedAt: new Date().toISOString() };
-      await saveState(state);
+      await write(() => saveState(state), runGeneration);
+      if (!isCurrent()) return status;
       return setStatus({ state: 'ok', lastSyncedAt: state.lastSyncedAt });
     } catch (error) {
+      if (!isCurrent()) return status;
       if (error instanceof SyncError && (error.code === 'not-approved' || error.code === 'disabled')) {
         return setStatus({ state: 'needs-sign-in', lastSyncedAt: state.lastSyncedAt, error: error.message });
       }
@@ -97,16 +122,27 @@ export function createSyncEngine(gateway: SyncGateway) {
   }
 
   function syncSessions(auth: AuthSession | null): Promise<SyncStatus> {
-    if (inFlight) {
-      queued = { auth };
-      return inFlight;
+    const nextKey = auth ? JSON.stringify([auth.user.email.trim().toLowerCase(), auth.syncToken]) : null;
+    if (nextKey !== authKey) {
+      generation += 1;
+      authKey = nextKey;
     }
-    inFlight = run(auth).finally(() => {
-      inFlight = null;
-      const next = queued;
-      queued = null;
-      if (next) void syncSessions(next.auth);
-    });
+    queued = { auth, generation };
+    if (!auth) setStatus({ state: 'signed-out', lastSyncedAt: null });
+    if (inFlight) return inFlight;
+    // Every caller awaits the whole drain, including the latest auth (even null).
+    inFlight = (async () => {
+      try {
+        while (queued) {
+          const next = queued;
+          queued = null;
+          await run(next.auth, next.generation);
+        }
+        return status;
+      } finally {
+        inFlight = null;
+      }
+    })();
     return inFlight;
   }
 
@@ -126,9 +162,12 @@ export function createSyncEngine(gateway: SyncGateway) {
      * local rows (the server ignores ones it already has).
      */
     async resetSyncState(): Promise<void> {
-      const { email } = await loadState();
-      await saveState({ ...EMPTY_STATE, email });
-      setStatus({ state: 'signed-out', lastSyncedAt: null });
+      generation += 1;
+      void syncSessions(null);
+      await write(async () => {
+        const { email } = await loadState();
+        await saveState({ ...EMPTY_STATE, email });
+      });
     },
   };
 }
