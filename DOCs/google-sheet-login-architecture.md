@@ -18,7 +18,7 @@ The app depends only on `AuthGateway` from `lib/auth/types.ts`:
 
 1. The native Google SDK (iOS/Android) or Google Identity Services (web) returns an ID token for the Web client ID.
 2. The app sends that token to Apps Script over HTTPS.
-3. Apps Script asks Google's token verification endpoint to validate it.
+3. Apps Script asks Google's `tokeninfo` endpoint to validate it using an HTTPS POST form body, keeping the ID token out of the URL. Redirects are rejected. This beta backend still depends on the debug-oriented endpoint; production should use signature verification with Google's public keys or a supported server library.
 4. Apps Script independently checks audience, issuer, expiration, and verified email.
 5. Only then does Apps Script look up the normalized email in the private `Users` worksheet.
 6. The app stores the approved session, including user metadata, expiration, and the `syncToken` bearer secret. Native builds use platform SecureStore; web uses AsyncStorage backed by localStorage because SecureStore is unavailable there. Web storage is readable by JavaScript running on the app's origin, so an XSS vulnerability can expose the sync token and allow sync access as that user until the token expires or is revoked.

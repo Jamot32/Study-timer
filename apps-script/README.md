@@ -24,7 +24,7 @@ Create a standalone Apps Script project and copy in `Code.gs` and `appsscript.js
 - `GOOGLE_WEB_CLIENT_ID`: the Web OAuth client ID used by the Expo app.
 - `SYNC_SECRET`: a long random string (e.g. `openssl rand -base64 48`) used to HMAC-sign the 30-day sync tokens issued at login. Required: without it login and sync both fail with `not-configured`. Rotating it invalidates every issued sync token at once; users get a new token on their next login.
 
-The script calls Google's `tokeninfo` endpoint, then validates the token audience, issuer, expiration, and verified-email flag before reading the allowlist.
+The script calls Google's `tokeninfo` endpoint using an HTTPS POST with `id_token` in the form body, then validates the token audience, issuer, expiration, and verified-email flag before reading the allowlist. The token is never included in the URL, and redirects are rejected. Google [documents POST support](https://developers.google.com/identity/openid-connect/reference#tokeninfo-endpoint), but this debug-oriented endpoint can throttle or fail intermittently; replace it with public-key signature verification or a supported server library before production.
 
 A successful login also returns `session.syncToken`. `push`/`pull` requests carry it instead of a Google ID token; the script checks its signature and expiry, then re-checks the `Users` sheet on every call, so disabling or removing a row stops sync immediately. Rotate `SYNC_SECRET` to revoke all tokens.
 
