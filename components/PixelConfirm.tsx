@@ -9,6 +9,7 @@ type ConfirmProps = {
   /** 되돌릴 수 없는 쪽 버튼 글자. */
   confirmLabel: string;
   cancelLabel?: string;
+  confirmVariant?: 'danger' | 'primary';
   onConfirm: () => void;
   onCancel: () => void;
 };
@@ -20,6 +21,7 @@ export default function ConfirmDialog({
   message,
   confirmLabel,
   cancelLabel = 'Keep going',
+  confirmVariant = 'danger',
   onConfirm,
   onCancel,
 }: ConfirmProps) {
@@ -39,7 +41,7 @@ export default function ConfirmDialog({
               {cancelLabel}
             </Button>
             <Button
-              variant="danger"
+              variant={confirmVariant}
               onPress={onConfirm}
               accessibilityLabel={confirmLabel}
               style={styles.buttonSlot}

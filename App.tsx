@@ -21,6 +21,7 @@ import BottomTabs, { type AppTab } from './components/BottomTabs';
 import CountdownOverlay from './components/CountdownOverlay';
 import Loading from './components/Loading';
 import Login from './components/Login';
+import ConfirmDialog from './components/PixelConfirm';
 import ProfileEdit from './components/ProfileEdit';
 import { clearProfile, loadProfile, saveProfile, type Profile } from './lib/profile';
 import { googleSheetAuth, type AuthSession } from './lib/auth';
@@ -79,6 +80,7 @@ export default function App() {
   const [profile, setProfile] = useState<Profile | null | undefined>(undefined);
   // present only when Google + the sheet allowlist approved this user
   const [authSession, setAuthSession] = useState<AuthSession | null>(null);
+  const [consentEmail, setConsentEmail] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -146,6 +148,15 @@ export default function App() {
   useEffect(
     () =>
       subscribeSyncStatus((status) => {
+        setConsentEmail(status.state === 'needs-consent' ? status.consentEmail ?? null : null);
+        if (status.errorCode === 'not-approved' || status.errorCode === 'disabled') {
+          // Revoke Google auth immediately, but keep the local profile/history for guest use.
+          setAuthSession(null);
+          void googleSheetAuth.signOut().catch((error) => {
+            console.error('Failed to clear revoked auth session:', error);
+          });
+          return;
+        }
         if (status.state !== 'ok') return;
         void settleDailyCoupons()
           .catch(() => [])
@@ -155,9 +166,11 @@ export default function App() {
   );
 
   const signOut = useCallback(async () => {
-    await Promise.all([googleSheetAuth.signOut(), resetSyncState()]);
-    await clearProfile();
+    // Invalidate sync before auth storage is cleared; stop scheduling signed-in foreground syncs.
+    const reset = resetSyncState();
     setAuthSession(null);
+    await Promise.all([googleSheetAuth.signOut(), reset]);
+    await clearProfile();
     setBattlePane('lobby');
     setResult(null);
     setActiveTab('battle');
@@ -445,6 +458,21 @@ export default function App() {
         )}
 
         {countdown !== null && <CountdownOverlay value={countdown} />}
+
+        <ConfirmDialog
+          visible={!!consentEmail && consentEmail === authSession?.user.email.trim().toLowerCase()}
+          title="Local study history"
+          message={`Upload local study history to ${consentEmail}? If you keep it local, it will stay visible on this device and will not sync to a Google account.`}
+          confirmLabel="Upload"
+          cancelLabel="Keep local"
+          confirmVariant="primary"
+          onConfirm={() => {
+            if (authSession) void syncSessions(authSession, 'upload');
+          }}
+          onCancel={() => {
+            if (authSession) void syncSessions(authSession, 'keep-local');
+          }}
+        />
 
         <StatusBar style="dark" />
       </SafeAreaView>

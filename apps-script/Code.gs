@@ -1,7 +1,5 @@
 const USERS_SHEET_NAME = 'Users';
 const REQUIRED_COLUMNS = ['email', 'status', 'display_name', 'role', 'avatar'];
-// Temporary DB for the closed beta. Script property SPREADSHEET_ID overrides it.
-const DEFAULT_SPREADSHEET_ID = '13VRYsnBayobLLOEdLGvd8OoBUqSUIjGnHrDd0KxCn8I';
 const ALLOWED_ISSUERS = ['accounts.google.com', 'https://accounts.google.com'];
 const SYNC_TOKEN_TTL_MS = 30 * 24 * 60 * 60 * 1000;
 
@@ -45,8 +43,14 @@ function verifyGoogleToken_(idToken) {
   if (!expectedAudience) throw authError_('provider-error', 'Server OAuth configuration is missing.');
 
   const response = UrlFetchApp.fetch(
-    'https://oauth2.googleapis.com/tokeninfo?id_token=' + encodeURIComponent(idToken),
-    { muteHttpExceptions: true }
+    'https://oauth2.googleapis.com/tokeninfo',
+    {
+      method: 'post',
+      contentType: 'application/x-www-form-urlencoded',
+      payload: { id_token: idToken },
+      followRedirects: false,
+      muteHttpExceptions: true,
+    }
   );
   if (response.getResponseCode() !== 200) {
     throw authError_('provider-error', 'Google could not verify this login.');
@@ -68,11 +72,14 @@ function verifyGoogleToken_(idToken) {
   return identity;
 }
 
-function findActiveUser_(identity) {
-  const spreadsheetId =
-    PropertiesService.getScriptProperties().getProperty('SPREADSHEET_ID') || DEFAULT_SPREADSHEET_ID;
+function spreadsheetId_() {
+  const spreadsheetId = (PropertiesService.getScriptProperties().getProperty('SPREADSHEET_ID') || '').trim();
+  if (!spreadsheetId) throw authError_('not-configured', 'Server spreadsheet configuration is missing.');
+  return spreadsheetId;
+}
 
-  const sheet = SpreadsheetApp.openById(spreadsheetId).getSheetByName(USERS_SHEET_NAME);
+function findActiveUser_(identity) {
+  const sheet = SpreadsheetApp.openById(spreadsheetId_()).getSheetByName(USERS_SHEET_NAME);
   if (!sheet) throw authError_('provider-error', 'The Users worksheet does not exist.');
 
   const values = sheet.getDataRange().getDisplayValues();
