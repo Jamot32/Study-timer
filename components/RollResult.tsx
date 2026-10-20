@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Animated, Easing, Modal, Pressable, StyleSheet, Text, View } from 'react-native';
-import * as Haptics from 'expo-haptics';
+import * as haptics from '@/lib/haptics';
 import { Coffee, Coins } from 'lucide-react-native';
 import { Button, RADIUS, SEMANTIC, T, elevation } from '@/components/nova';
 import { groupInfo, itemGroupOf, itemIcon } from '@/components/itemMeta';
@@ -111,10 +111,7 @@ export default function RollResult({
     });
     // 쿠폰은 또렷한 성공 진동, 휴식은 가벼운 한 번.
     const t = setTimeout(() => {
-      void (draw.kind === 'coupon'
-        ? Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success)
-        : Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light)
-      ).catch(() => {});
+      void (draw.kind === 'coupon' ? haptics.success() : haptics.lightTap());
     }, 320);
     return () => clearTimeout(t);
   }, [book, rise, glow, draw.kind]);
