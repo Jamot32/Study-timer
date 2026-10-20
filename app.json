@@ -20,7 +20,11 @@
       "predictiveBackGestureEnabled": false
     },
     "web": {
-      "favicon": "./assets/favicon.png"
+      "favicon": "./assets/favicon.png",
+      "name": "Study Timer",
+      "lang": "en",
+      "bundler": "metro",
+      "output": "single"
     },
     "plugins": [
       "expo-font"

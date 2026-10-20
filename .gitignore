@@ -48,3 +48,9 @@ yarn-error.*
 .vscode/
 .claude/
 .commandcode/
+
+# local env (real values live in the hosting dashboard, never in git)
+.env
+
+# Vercel CLI link
+.vercel/
