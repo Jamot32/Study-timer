@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html lang="%LANG_ISO_CODE%">
+  <head>
+    <meta charset="utf-8" />
+    <meta httpEquiv="X-UA-Compatible" content="IE=edge" />
+    <!-- viewport-fit=cover lets SafeAreaView read env(safe-area-inset-*) on notched phones. -->
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <title>%WEB_TITLE%</title>
+    <meta name="description" content="A quiet garden for your focus — a study timer with matches, rolls and stats." />
+    <!-- Browser chrome colour = T.bg in components/nova.tsx -->
+    <meta name="theme-color" content="#FAF8F2" />
+    <meta name="color-scheme" content="light" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-title" content="Study Timer" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+    <meta name="format-detection" content="telephone=no" />
+    <!-- The `react-native-web` recommended style reset: https://necolas.github.io/react-native-web/docs/setup/#root-element -->
+    <style id="expo-reset">
+      html,
+      body {
+        height: 100%;
+        margin: 0;
+        /* T.bg — no white flash before the bundle paints */
+        background-color: #faf8f2;
+      }
+      /* dvh follows the mobile URL bar, so the bottom tab bar is never hidden behind it. */
+      @supports (height: 100dvh) {
+        html,
+        body {
+          height: 100dvh;
+        }
+      }
+      body {
+        /* The app scrolls inside its own ScrollViews; the page itself never does. */
+        overflow: hidden;
+        overscroll-behavior: none;
+        -webkit-text-size-adjust: 100%;
+        text-size-adjust: 100%;
+        -webkit-tap-highlight-color: transparent;
+      }
+      #root {
+        display: flex;
+        height: 100%;
+        flex: 1;
+      }
+      /*
+       * Wide screens: the app is a portrait phone layout, so keep it as a centred
+       * phone-width column instead of stretching buttons across a monitor.
+       * Phones (< 600px) are untouched and fill the screen.
+       */
+      @media (min-width: 600px) {
+        body {
+          background-color: #f1eee3; /* T.bgSunk */
+        }
+        #root {
+          width: 100%;
+          max-width: 480px;
+          margin: 0 auto;
+          background-color: #faf8f2;
+          box-shadow:
+            0 0 0 1px rgba(34, 38, 28, 0.06),
+            0 12px 40px rgba(34, 38, 28, 0.1);
+        }
+      }
+    </style>
+  </head>
+
+  <body>
+    <noscript>You need to enable JavaScript to run Study Timer.</noscript>
+    <div id="root"></div>
+  </body>
+</html>
