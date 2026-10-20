@@ -14,12 +14,14 @@ import StudyTimer from './components/StudyTimer';
 import Settings from './components/Settings';
 import Shop from './components/Shop';
 import ProfileEdit from './components/ProfileEdit';
+import Login from './components/Login';
 import BottomTabs, { type AppTab } from './components/BottomTabs';
 import CountdownOverlay from './components/CountdownOverlay';
 import { Tabs, TabsContent } from './components/ui/tabs';
 import { T } from './components/nova';
 import { type CpuOpponent } from './lib/cpuOpponent';
 import { loadProfile, normalizeProfile, type Profile } from './lib/profile';
+import { googleSheetAuth, type AuthSession } from './lib/auth';
 import { arenaById, eloAfter, type Arena } from './lib/arena';
 import { outcomeOf, settleMatch, type MatchOutcome } from './lib/match';
 import { SOLO_MIN_MINUTES } from './lib/economy';
@@ -55,7 +57,7 @@ export default function App() {
   const [rollFocused, setRollFocused] = useState(false);
   const onRollFocus = useCallback((f: boolean) => setRollFocused(f), []);
   // 설정과 프로필 편집은 탭이 아니라 배틀 화면 위에 얹힌다.
-  const [battlePane, setBattlePane] = useState<'lobby' | 'settings' | 'profile'>('lobby');
+  const [battlePane, setBattlePane] = useState<'lobby' | 'settings' | 'profile' | 'login'>('lobby');
   // 판이 끝나면 정산 결과가 여기 담기고, 로비 대신 결과 화면이 뜬다.
   const [result, setResult] = useState<MatchResultData | null>(null);
   // ROLL 결과에서 '가방에서 보기'를 누르면 올라간다. 상점 탭이 이걸 보고 가방을 연다.
@@ -66,11 +68,18 @@ export default function App() {
   const [matchCoupons, setMatchCoupons] = useState<CouponId[]>([]);
   const [entryPaid, setEntryPaid] = useState(0);
   const [profile, setProfile] = useState<Profile>(normalizeProfile({ name: 'Guest' }));
+  // Google + 시트 허용 목록이 승인한 경우에만 채워진다. 없으면 기기 로컬 프로필로만 쓴다.
+  const [authSession, setAuthSession] = useState<AuthSession | null>(null);
 
   useEffect(() => {
     loadProfile().then((saved) => {
       if (saved) setProfile(saved);
     });
+    // 저장된 Google 세션을 되살린다. 실패는 전부 '로그아웃 상태'로 끝난다.
+    void googleSheetAuth
+      .restoreSession()
+      .then(setAuthSession)
+      .catch(() => setAuthSession(null));
     // 앱을 비운 사이 지나간 자정들 — 타임캡슐·복리·끊길 뻔한 연속 — 을 먼저 정산한다.
     void settleDailyCoupons().then((events) => {
       if (events.length) setRefreshKey((k) => k + 1);
@@ -93,6 +102,16 @@ export default function App() {
       cancelled = true;
     };
   }, []);
+
+  // 설정의 아래 버튼: 로그인 중이면 로그아웃, 아니면 로그인 화면(Google 또는 이름)으로.
+  const signOutOrChangeUser = useCallback(async () => {
+    if (!authSession) {
+      setBattlePane('login');
+      return;
+    }
+    await googleSheetAuth.signOut();
+    setAuthSession(null);
+  }, [authSession]);
 
   const selectTab = useCallback((tab: AppTab) => {
     startTabDecided.current = true;
@@ -268,7 +287,11 @@ export default function App() {
           </TabsContent>
 
           <TabsContent value="stats" className="flex-1 w-full max-w-lg mx-auto">
-            <Dashboard isActive={activeTab === 'stats'} refreshKey={refreshKey} />
+            <Dashboard
+              isActive={activeTab === 'stats'}
+              refreshKey={refreshKey}
+              authSession={authSession}
+            />
           </TabsContent>
 
           <TabsContent value="battle" className="flex-1">
@@ -279,7 +302,18 @@ export default function App() {
                 onBack={() => setBattlePane('lobby')}
                 onChanged={() => setRefreshKey((k) => k + 1)}
                 profile={profile}
+                authSession={authSession}
                 onEditProfile={() => setBattlePane('profile')}
+                onSignOut={signOutOrChangeUser}
+              />
+            ) : battlePane === 'login' ? (
+              <Login
+                onCancel={() => setBattlePane('settings')}
+                onLoggedIn={(nextProfile, session) => {
+                  setProfile(nextProfile);
+                  setAuthSession(session);
+                  setBattlePane('settings');
+                }}
               />
             ) : battlePane === 'profile' ? (
               <ProfileEdit

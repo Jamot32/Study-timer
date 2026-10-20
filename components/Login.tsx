@@ -7,9 +7,11 @@ import { NAME_MAX, saveProfile, type Profile } from '@/lib/profile';
 
 type LoginProps = {
   onLoggedIn: (profile: Profile, session: AuthSession | null) => void;
+  /** Shown as a Back link when Login is opened from Settings rather than first launch. */
+  onCancel?: () => void;
 };
 
-export default function Login({ onLoggedIn }: LoginProps) {
+export default function Login({ onLoggedIn, onCancel }: LoginProps) {
   const [name, setName] = useState('');
   const [focused, setFocused] = useState(false);
   const [checking, setChecking] = useState(false);
@@ -91,6 +93,11 @@ export default function Login({ onLoggedIn }: LoginProps) {
         >
           Continue as guest
         </Button>
+        {onCancel ? (
+          <Button block size="md" variant="ghost" onPress={onCancel}>
+            Back
+          </Button>
+        ) : null}
       </Card>
     </View>
   );
