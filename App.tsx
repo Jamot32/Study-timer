@@ -22,6 +22,7 @@ import { T } from './components/nova';
 import { type CpuOpponent } from './lib/cpuOpponent';
 import { loadProfile, normalizeProfile, type Profile } from './lib/profile';
 import { googleSheetAuth, type AuthSession } from './lib/auth';
+import { resetSyncState, subscribeSyncStatus, syncSessions } from './lib/sync';
 import { arenaById, eloAfter, type Arena } from './lib/arena';
 import { outcomeOf, settleMatch, type MatchOutcome } from './lib/match';
 import { SOLO_MIN_MINUTES } from './lib/economy';
@@ -103,6 +104,22 @@ export default function App() {
     };
   }, []);
 
+  // 동기화: 로그인·세션 복원 직후, 그리고 기록이 바뀔 때마다(판 종료 등 refreshKey) 한 번씩.
+  // Stats 의 당겨서 새로고침은 웹에 없어서, 이것이 웹에서 동기화가 도는 유일한 길이다.
+  useEffect(() => {
+    if (authSession) void syncSessions(authSession);
+  }, [authSession, refreshKey]);
+  // 동기화가 성공하면 Stats 가 저장소를 다시 읽게 한다. refreshKey 를 올리면 위 효과가
+  // 또 동기화를 돌리므로 별도 카운터로 둔다.
+  const [syncedVersion, setSyncedVersion] = useState(0);
+  useEffect(
+    () =>
+      subscribeSyncStatus((status) => {
+        if (status.state === 'ok') setSyncedVersion((v) => v + 1);
+      }),
+    []
+  );
+
   // 설정의 아래 버튼: 로그인 중이면 로그아웃, 아니면 로그인 화면(Google 또는 이름)으로.
   const signOutOrChangeUser = useCallback(async () => {
     if (!authSession) {
@@ -110,6 +127,7 @@ export default function App() {
       return;
     }
     await googleSheetAuth.signOut();
+    await resetSyncState();
     setAuthSession(null);
   }, [authSession]);
 
@@ -289,7 +307,7 @@ export default function App() {
           <TabsContent value="stats" className="flex-1 w-full max-w-lg mx-auto">
             <Dashboard
               isActive={activeTab === 'stats'}
-              refreshKey={refreshKey}
+              refreshKey={refreshKey + syncedVersion}
               authSession={authSession}
             />
           </TabsContent>
